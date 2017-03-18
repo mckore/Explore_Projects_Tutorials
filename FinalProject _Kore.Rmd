@@ -1,0 +1,1249 @@
+---
+title: "FinalProject"
+author: "Kore"
+date: "3/1/2017"
+output: html_document
+---
+
+```{r}
+library(ggplot2)
+library(plyr)
+library(knitr)
+options(scipen=4)
+NLSY97 <- read.csv("nlsy97_income.csv", header = TRUE, sep = ",")
+```
+
+Inital inspection of original dataset "nlsy97_income.csv", provides convluted insights on the question of gender income disperancies. The dataset retitiled, NLSY97, reports from `r nrow(NLSY97)` respondents and contains `r ncol(NLSY97)` variables. After consultation with the survey result keys and descriptions, the columns were relabled to match appropriate descriptions. A key note to be concious of is that surveys and responses span from years 1997 through 2011, variables cannot be ruled out as redundant if responses were collected in different time frames. 
+
+The new column titles will enable a better understanding of the data spread in context with the survey results. This analysis will also investigate the effect of total incarcerations on both, gender and income.
+
+```{r}
+colnames(NLSY97) <- c("Total.INC", "Age.1st.INC", "Length.Longest.INC", "Youth.Case.ID", 
+                      "Quality.Teachers", "Safe.School", "NWk.Religious.Practice", "Chance.Flu",
+                      "Chance.HS.Diploma.20yo", "Chance.Jail.20yo", "Chance.Parent.20yo",
+                      "Chance.Bach.Degree.30yo", "Gender", "Birth.Month", "Birth.Year",
+                      "Dis.Limits", "F.Neg.Emotion", "M.Neg.Emotion", "Current.Enrollment.Status",
+                      "Net.Worth.Parent", "Sample.Type", "Race", "Grade.8.Grades", "HS.Grades",
+                      "Hard.Drug.Use", "MJ.Use.30days", "Organization.Level", "Trustworthy.Level",
+                      "Net.Worth.Student", "Weight.in.lbs", "Perceived.Weight", "Philanthropy.Scale", 
+                      "Independence.Scale", "Personal.Philanthropy.Scale",
+                      "Individual.Independence.Scale", "Higher.Ed.Type", "Gross.Family.Income",
+                      "Household.Size", "Household.Sub.18yo", "Household.Sub.6yo", 
+                      "Highest.Degree.preFall", "Marital.Status", "Highest.Grade.Completed",
+                      "Income.binary", "Income", "Spouse.Income.binary", "Spouse.Income", 
+                      "Spouse.Income.Est", "Height.ft", "Height.in", "Weight.in.lbs2",
+                      "Tobacco.Smoke.DLI", "Alcohol.Consumption.DLI", "MJ.Use.30days2", 
+                      "Hard.Drug.Use.DLI", "Perceived.Weight2", "Weight.Care",
+                      "Energy.Level.4wks", "Business.Type", "SAT.Math", "SAT.Verbal",
+                      "ACT.Score", "Debt.by.20yo", "Njobs.14yo", "Njobs.20yo", "jobs.20plus", 
+                      "Debt.by.30yo")
+```
+
+##Data Summary
+
+
+It is imperative to classify the `r ncol(NLSY97)` variables in the `NLSY97` dataset because of the presence of negative value responses for several vectors. However, once classified and appropriately managed, the negative value responses will prove to be useful. 
+
+###Data Spread
+
+Categoical vs. Continuous Variables  
+After imputing the data, the first and most crucial step is to determine if a variable should be treated as categorical or continuous. This will influence how the variables perform mathematically and are viewed graphically. For this analysis of the `NLSY97`, the following steps were taking into consideration for determining how variable should be classified: 
+- Understand how value corresponds to survey results
+- Assess if the observation is collecting unrestricted values
+- Look at the distribution spread of the observations through histogram or scatter plot 
+
+For special considerations, such as, `Total.INC` or Total Incarcerations, that fit the general mold of a continuous variable but as the data is distributed, zero rich and heavily skewed to the right, it is more appropriate to bin the observations. 
+
+```{r echo=FALSE, results='hide',message=FALSE}
+hist(NLSY97$Total.INC, col= "lightblue",
+     main = "Histogram of Total Incarcerations",
+     xlab = "Total Incarcerations")
+```
+
+The data binned into four categories:
+
+0 = No Incarceration
+1 = One Incarceration
+2 = Two Incarcerations
+3+ = Three or more Incarcerations 
+
+This new distriubtion of data has improved in balance of dispersion of observations. 
+
+```{r echo=FALSE, results='hide',message=FALSE}
+NLSY97 <- transform(NLSY97, 
+                    Total.INC = as.factor(mapvalues(Total.INC, c(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 12),
+                                                    c(0, 1, 2, "3+", "3+", "3+", "3+", "3+", "3+",
+                                                      "3+", "3+")))) 
+qplot(NLSY97$Total.INC, ylim = c(0, 8200),
+      main = "Histogram of Total Incarcerations",
+     xlab = "Total Incarcerations",
+     ylab = "Frequency")
+```
+
+###Categorical Variables
+The following were classified as categoical variables with their respective binning properties listed in the Rcode:
+
+`Birth.Month`|`Dis.Limits`|`Gender`|`F.Neg.Emotion`|`Current.Enrollment.Status` 
+`Race`|`Grade.8.Grades`|`Trustworthy.Level`|`Perceived.Weight`|`Higher.Ed.Type`
+`Highest.Degree.preFall`|`Marital.Status`|`Highest.Grade.Completed`|`Income.binary` `Spouse.Income.binary`|`Spouse.Income.Est`|`Tobacco.Smoke.DLI`|`Alcohol.Consumption.DLI` `Perceived.Weight2`|`Weight.Care`|`Energy.Level.4wks`|`Business.Type`|`SAT.Verbal`|`SAT.Math` 
+`ACT.Score`|`Quality.Teachers`|`Safe.School`|`NWk.Religious.Practice`|`M.Neg.Emotion`
+`Sample.Type`|`HS.Grades`|`Hard.Drug.Use`|`Organization.Level`|`Philanthropy.Scale` `Independence.Scale`|`Personal.Philanthropy.Scale`|`Individual.Independence.Scale`
+`Hard.Drug.Use.DLI`|`Birth.Year`
+
+Based on the information in the surveys, variables `Sample.Type` and `Youth.Case.ID` will be removed. These variables are identifier of respondents and are not pertinent to the analysis. All categorical variables must be transformed into a factor and values appropriately mapped to corresponding bins. 
+
+Note:
+Educational Performance variables, `Grade.8.Grades` and `HS.Grades`, were defined as highest marks, grades, as "Mostly As" and lowest marks, failing grades, as "Mostly below Ds." The values for grades followed the American academic assessment scale of A, B, C, D, F. 
+
+```{r echo=FALSE, results='hide',message=FALSE}
+NLSY97 <- transform(NLSY97, 
+                    Total.INC = as.factor(mapvalues(Total.INC, c(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 12),
+                                                    c(0, 1, 2, "3+", "3+", "3+", "3+", "3+", "3+", 
+                                                      "3+", "3+"))), 
+                    Quality.Teachers = as.factor(mapvalues(Quality.Teachers, 
+                                                           c(-4, -2, -1, 1, 2, 3, 4),
+                                                           c("Skip", "DK", "Refuse", "S.Agree", 
+                                                             "Agree", "Disagree","S.Disagree"))),
+                    Safe.School = as.factor(mapvalues(Safe.School, c(-4, -2, -1, 1, 2, 3, 4),
+                                                      c("Skip", "DK", "Refuse", "S.Agree", "Agree", 
+                                                        "Disagree","S.Disagree"))),
+                    NWk.Religious.Practice = as.factor(mapvalues(NWk.Religious.Practice, 
+                                                                 c(-4, -3, -2, -1),
+                                                                 c("Skip", "In.Skip", "DK", 
+                                                                   "Refuse"))),
+                    Birth.Month = as.factor(Birth.Month),
+                    Birth.Year = as.factor(Birth.Year),
+                    Dis.Limits = as.factor(mapvalues(Dis.Limits, c(-4, -2, -1, 0, 1),
+                                                     c("Skip", "DK", "Refuse", "No", "Yes"))),
+                    Gender = as.factor(mapvalues(Gender, c(1, 2),
+                                    c("Male", "Female"))),
+                    F.Neg.Emotion = as.factor(mapvalues(F.Neg.Emotion, c(-4, -2, -1, 0, 1, 2),
+                                                        c("Skip", "DK", "Refuse", "Not true", 
+                                                          "Sometimes", "Often"))),
+                    M.Neg.Emotion = as.factor(mapvalues(M.Neg.Emotion, c(-4, -2, -1, 0, 1, 2),
+                                                        c("Skip", "DK", "Refuse", "Not true", 
+                                                          "Sometimes", "Often"))),
+                    Current.Enrollment.Status = as.factor(mapvalues(Current.Enrollment.Status, 
+                                                         c(-2, 1, 2, 3, 8, 9, 10),
+                                                    c("DK", "Not Enrolled Secondary Ed", 
+                                                    "Not Enrolled Higher Ed","Not Enrolled Higher Ed",
+                                                    "Enrolled GED","Enrolled JuCo", 
+                                                    "Enrolled Higher Ed"))),
+                    Sample.Type = as.factor(mapvalues(Sample.Type, c(0, 1),
+                                                      c("Oversample", "Cross-sectional"))),
+                    Race = as.factor(mapvalues(Race, c(1, 2, 3, 4),
+                                                     c("Black", "Hispanic", "Mixed", "Other"))),
+                    Grade.8.Grades = as.factor(mapvalues(Grade.8.Grades, 
+                                            c(-5, -4, -2, -1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12),
+                                            c("Non-Int", "Skip", "Dk", "Refuse", "Failing", 
+                                              "Low Marks", "Low Marks", "Low Marks", "High Marks", 
+                                              "High Marks", "High Marks", "High Marks","Undetermined",
+                                              "High Marks", "Undetermined", "Undetermined"))),
+                    HS.Grades = as.factor(mapvalues(HS.Grades, 
+                                              c(-5, -4, -2, -1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12),
+                                              c("Non-Int", "Skip", "Dk", "Refuse", "Failing", 
+                                                "Low Marks", "Low Marks", "Low Marks", "High Marks", 
+                                                "High Marks", "High Marks", "High Marks",
+                                                "Undetermined", "Undetermined", "Undetermined"))),
+                    Hard.Drug.Use = as.factor(mapvalues(Hard.Drug.Use, c(-5, -2, -1, 0, 1),
+                                                        c("Non-Int", "DK", "Refuse", "No", "Yes"))),
+                    Organization.Level = as.factor(mapvalues(Organization.Level, c(-5, -4, -2, -1),
+                                                             c("Non-Int", "Skip", "DK", "Refuse"))),
+                    Trustworthy.Level = as.factor(mapvalues(Trustworthy.Level, c(-5, -4, -2, -1),
+                                                            c("Non-Int", "Skip", "DK", "Refuse"))),
+                    Perceived.Weight = as.factor(mapvalues(Perceived.Weight, c(-5, -4, -2, -1),
+                                                           c("Non-Int", "Skip", "DK", "Refuse"))),
+                    Philanthropy.Scale = as.factor(mapvalues(Philanthropy.Scale, 
+                                                             c(-5, -4, -2, -1, 0, 1, 2, 3, 4),
+                                                             c("Non-Int", "Skip", "DK", "Refuse", 
+                                                               "S.Disagree", "Disagree", "Apth", 
+                                                               "Agree", "S.Agree"))),
+                    Independence.Scale = as.factor(mapvalues(Independence.Scale, 
+                                                             c(-5, -4, -2, -1, 0, 1, 2, 3, 4),
+                                                             c("Non-Int", "Skip", "DK", "Refuse", 
+                                                               "S.Disagree", "Disagree", "Apth", 
+                                                               "Agree", "S.Agree"))),
+                    Personal.Philanthropy.Scale = as.factor(mapvalues(Personal.Philanthropy.Scale, 
+                                                            c(-5, -4, -2, -1, 0, 1, 2, 3, 4),
+                                                            c("Non-Int", "Skip", "DK", "Refuse", 
+                                                              "S.Disagree", "Disagree", "Apth", 
+                                                              "Agree", "S.Agree"))),
+                    Individual.Independence.Scale = as.factor(mapvalues(Individual.Independence.Scale,
+                                                              c(-5, -4, -2, -1, 0, 1, 2, 3, 4),
+                                                              c("Non-Int", "Skip", "DK", "Refuse", 
+                                                                "S.Disagree", "Disagree", "Apth", 
+                                                                "Agree", "S.Agree"))),
+                    Higher.Ed.Type = as.factor(mapvalues(Higher.Ed.Type, c(-5, -4, -3, 1, 2, 3),
+                                              c("Non-Int", "Skip", "Inv.Skip", "Public", 
+                                               "Private Non-Proft", "Private For-Profit"))),
+                    Highest.Degree.preFall = as.factor(mapvalues(Highest.Degree.preFall, 
+                                                      c(-5, -3, 0, 1, 2, 3, 4, 5, 6, 7),
+                                                      c("Non-Int", "Inv.Skip", "None", "GED", "HS", 
+                                                        "JuCo", "Bach", "Mast", "PhD", "Prof"))),
+                    Marital.Status = as.factor(mapvalues(Marital.Status, c(-5, -3, 0, 1, 2, 3, 4),
+                                                 c("Non-Int", "Inv.Skip", "Never", "Married", 
+                                                   "Separated", "Divorced", "Widowed"))),
+                    Highest.Grade.Completed = as.factor(mapvalues (Highest.Grade.Completed,
+                                             c(-5, -4, -2, -1, 0, 95, 1, 2, 3, 4, 5, 6, 7, 8, 
+                                               9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20),
+                                             c("Non-Int", "Skip", "DK", "Refusal", "None", 
+                                               "None", "Elm", "Elm", "Elm", "Elm", "Elm", "MS",
+                                               "MS", "MS", "HS", "HS", "HS", "HS", "College", 
+                                               "College", "College", "College", "College+", 
+                                               "College+", "College+", "College+"))),
+                    Income.binary = as.factor(mapvalues(Income.binary, c(-5, -2, -1, 0, 1),
+                                                       c("Non-Int", "DK", "Refuse", "No", "Yes"))),
+                    Spouse.Income.binary = as.factor(mapvalues(Spouse.Income.binary, 
+                                                   c(-5, -4, -2, -1, 0, 1),
+                                                  c("Non-Int", "Skip", "DK", "Refuse", "No", "Yes"))),
+                    Spouse.Income.Est = as.factor(mapvalues(Spouse.Income.Est, 
+                                                            c(-5, -4, -2, -1, 1, 2, 3, 4, 5, 6, 7),
+                                                            c("Non-Int", "Skip", "DK", "Refuse", "A", 
+                                                              "B", "C", "D", "E", "F", "G"))),
+                    Tobacco.Smoke.DLI = as.factor(mapvalues(Tobacco.Smoke.DLI, c(-5, -2, -1, 0, 1),
+                                                       c("Non-Int", "DK", "Refuse", "No", "Yes"))),
+                    Alcohol.Consumption.DLI = as.factor(mapvalues(Alcohol.Consumption.DLI, 
+                                                  c(-5, -4, -2, -1, 0, 1),
+                                                  c("Non-Int", "Skip", "DK", "Refuse", "No", "Yes"))),
+                    Hard.Drug.Use.DLI = as.factor(mapvalues(Hard.Drug.Use.DLI, 
+                                                  c(-5, -4, -2, -1, 0, 1),
+                                                  c("Non-Int", "Skip", "DK", "Refuse", "No", "Yes"))),
+                    Perceived.Weight2= as.factor(mapvalues(Perceived.Weight2, 
+                                                 c(-5, -4, -2, -1, 1, 2, 3, 4, 5),
+                                                 c("Non-Int", "Skip", "DK", "Refuse", "V.Underweight",
+                                                   "Sl.Underweight","Right Weight", "Sl.Overweight", 
+                                                   "V.Overweight"))),
+                    Weight.Care= as.factor(mapvalues(Weight.Care, c(-5, -4, -2, -1),
+                                                     c("Non-Int", "Skip", "DK", "Refuse"))),
+                    Energy.Level.4wks= as.factor(mapvalues(Energy.Level.4wks, 
+                                                c(-5, -4, -2, -1, 1, 2, 3, 4, 5, 6),
+                                                c("Non-Int", "Skip", "DK", "Refuse", "All", "Most",
+                                                "Good", "Some", "Little", "None"))),
+                    Business.Type = as.factor(mapvalues(Business.Type, c(-5,	-4,	-3, 170,	180,	190,	270,	280,	290, 370,	380,	470,	490, 570,	580,	590,	670,	680,	690, 770, 1070,	1080,	1090,	1170,	1180,	1190,	1270,	1280, 1290,	1370,	1390,	1470,	1480,	1490,	1590,	1670, 1680,	1690,	1770,	1790,	1870,	1880,	1890,	1990, 2070,	2090,	2170,	2190,	2270,	2280,	2290,	2370, 2380,	2390,	2480,	2490,	2570,	2590,	2670,	2680, 2690,	2770,	2780,	2790,	2870,	2880,	2890,	2980, 2990,	3080,	3090,	3170,	3180,	3190,	3360,	3370,3380,	3390,	3470,	3490,	3570,	3580,	3590,	3670, 3680,	3690,	3770,	3780,	3790,	3870,	3890,	3960,
+3970,	3980, 4070,	4080,	4090,	4170,	4180,	4190,	4260,	4270, 4280,	4290,	4370,	4380,	4390,	4470,	
+4480,	4490, 4560,	4580,	4585, 4670,	4680,	4690,	4770,	4780,	4790,	4870,	4880, 4890,	4970,	4980,
+4990,	5070,	5080,	5090,	5170, 5180,	5190,	5270,	5290,	5370,	5380,	5390,	5470, 5480,	5490,	5570,
+5580,	5590,	5591,	5592,	5670, 5680,	5690,	5790, 6070,	6080,	6090,	6170,	6180,	6190,	6270,	6290,
+6370,	6380,	6390, 6470,	6480,	6490,	6570,	6590,	6670,	6675,	6680, 6690,	6692,	6695,	6770, 6870,
+6880,	6890,	6970,	6990,	7070,	7080,	7170, 7180,	7190, 7270,	7280,	7290,	7370, 7380,	7390,	7460,
+7470, 7480,	7490,	7570,	7580,	7590,	7670,	7680,	7690, 7770,	7780,	7790, 7860,	7870,	7880,	7890,
+7970,	7980,	7990,	8070, 8080,	8090,	8170,	8180,	8190,	8270,	8290,	8370, 8380,	8390,	8470, 8560,
+8570,	8590,	8660,	8670,	8680,	8690, 8770,	8780,	8790,	8870,	8880,	8970,	8980,	8990, 9070,	9080,
+9090,	9160,	9170,	9190,	9290, 9370,	9380,	9390,	9470,	9480,	9490,	9570,	9590, 9890, 9990),
+                                                        c("Non-Int", "Skip", "DK", "Ag", "Ag", "Ag", "Ag", "Ag", "Ag", "Min", "Min", "Min", "Min", "Utl", "Utl", "Utl", "Utl", "Utl", "Utl", "Cons", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf",
+"Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "Manf", "WhTr", "WhTr", "WhTr", "WhTr", "WhTr", "WhTr", "WhTr", "WhTr", "WhTr", "WhTr",
+"WhTr", "WhTr", "WhTr", "WhTr", "WhTr", "WhTr", "WhTr", "WhTr", "WhTr", "ReTr", "ReTr", "ReTr", "ReTr", "ReTr", "ReTr", "ReTr", "ReTr", "ReTr", "ReTr", "ReTr", "ReTr", "ReTr", "ReTr", "ReTr", "ReTr", "ReTr", "ReTr", "ReTr", "ReTr", "ReTr", "ReTr", "ReTr", "ReTr", "ReTr", "ReTr", "ReTr", "ReTr", "ReTr", "ReTr", "ReTr", "ReTr", "ReTr", "ReTr", "ReTr", "Trans", "Trans", "Trans", "Trans", "Trans", "Trans", "Trans", "Trans", "Trans", "Trans", "Trans", "Comm", "Comm", "Comm", "Comm", "Comm", "Comm", "Comm", "Comm", "Comm", "Comm", "Comm", "Comm", "Fin", "Fin", "Fin", "Fin", "Fin", "Fin", "Fin", "Fin", "Fin", "Fin", "Prof", "Prof", "Prof", "Prof", "Prof", "Prof", "Prof", "Prof", "Prof", "Prof", "Prof", "Prof", "Prof", "Prof", "Prof", "Prof", "Prof", "Prof", "Prof", "Edu", "Edu", "Edu", "Edu", "Edu", "Edu", "Edu", "Edu", "Edu", "Edu", "Edu", "Edu", "Edu", "Edu", "Edu", "Edu", "Edu", "Edu", "Edu", "Event", "Event", "Event", "Event", "Event", "Event", "Event", "Other", "Other", "Other", "Other", "Other", "Other", "Other", "Other", "Other", "Other", "Other", "Other", "Other", "Other", "Other", "Pub", "Pub", "Pub", "Pub", "Pub", "Pub", "Pub", "Pub", "Mil", "Spec"))),
+                    SAT.Verbal = as.factor(mapvalues(SAT.Verbal, c(-4, -3), 
+                                                     c("Skip", "Inv.Skip"))),
+                    SAT.Math = as.factor(mapvalues(SAT.Math, c(-4, -3), 
+                                                   c("Skip", "Inv.Skip"))),
+                    ACT.Score = as.factor(mapvalues(ACT.Score, c(-4, -3), 
+                                                    c("Skip", "Inv.Skip"))))
+
+```
+
+####Categorical variables: Missing Values and Outliers
+
+Missing Values for categorical variables are not a significant problem because the observations have a classified value in regards to missing which is tabulated into the results. Important assessments can be inferred from the missing values. 
+
+Example:
+There is a strong representation of observations connecting women who refused to declare their `Hard.Drug.Use.DLI` and an enrollment in a GED program. 
+```{r echo=FALSE, results='hide',message=FALSE}
+GED.lean <-subset(NLSY97, select = c("Current.Enrollment.Status"), subset = (Hard.Drug.Use.DLI == "Refuse" & Gender == "Female"))
+plot(GED.lean, col = "pink",
+      main = "Current Enrollment Status: Females who refusing to answer Hard Drug Use",
+     xlab = "Current Enrollment Status : Females who refusing to answer Hard Drug Use",
+     ylab = "Frequency")
+```
+
+This tactic also works for combining categoical and continuous observations. Of all the men that refused to indicate their income amount for the past year, the highest degree achieved for the majority of that subset was a high school diploma. 
+
+```{r echo=FALSE, results='hide',message=FALSE}
+hs.lean <- subset(NLSY97, select = c("Highest.Degree.preFall"), subset = (Income == "-1" & Gender == "Male"))
+plot(hs.lean, col = "blue",
+     main = "Highest Degree Earned: Males who Refuse to Declare Income",
+     xlab = "Highest Degree Earned: Males who Refuse to Delcare Income",
+     ylab = "Frequency")
+```
+
+####Gender and Total Incarcerations 
+
+```{r echo=FALSE, results='hide',message=FALSE}
+
+Gender.INC <- table(NLSY97$Gender, NLSY97$Total.INC)
+Ratio.Gender.INC1 <- Gender.INC[1,2]/Gender.INC[2,2]
+round(Ratio.Gender.INC1,2)
+Ratio.Gender.INC2 <- Gender.INC[1,3]/Gender.INC[2,3]
+round(Ratio.Gender.INC2,2)
+Ratio.Gender.INC3 <- Gender.INC[1,4]/Gender.INC[2,4]
+round(Ratio.Gender.INC3,2)
+with(NLSY97, plot(Total.INC, Gender,
+                  main = "Probability of Incarcerations by Gender",
+                  xlab = "Number of Total Incarcerations",
+                  ylab = "Gender"))
+```
+
+
+To explore the question of gender income disperancy, this report will also focus on the effect of total incarcerations. The probabilities of females compared to males for increases in `Total.INC` are as follows; `r round(Ratio.Gender.INC1,2)` for 1 incarceration, `r round(Ratio.Gender.INC2,2)` for 2 incarcerations, and `r round(Ratio.Gender.INC1,2)` for 3+ or more incarcerations. This data inferes that men are at a much higher risk of increased incarcerations as compared to women. However, this report will explore the women who have been incarcerated and the impact that has on their `Income`.  
+
+```{r}
+with(NLSY97, tapply(Income, INDEX = list(Gender, Total.INC), FUN = median))
+```
+The above table does not provide much insight into answering the question of how incarcerations affects income by gender due to how convaluted the data is with non-responses. This segways into how the continuous variables need to be cleaned to ensure that the more relevant observations are presented. 
+
+
+###Continuous Variables 
+
+The remainging variables are classified as continuous:
+`Length.Longest.INC`|`Chance.Jail.20yo`|`Chance.Parent.20yo`| `Chance.Bach.Degree.30yo` `Net.Worth.Parent`|`MJ.Use.30days`|`Net.Worth.Student`|`Weight.in.lbs`|`Gross.Family.Income`
+`Household.Size`|`Income`|`Spouse.Income`|`Height.in`|`Height.ft`|`Weight.in.lbs2`|
+`MJ.Use.30days2`|`Debt.by.20yo`|`Njobs.14yo`|`Njobs.20yo`|`Debt.by.30yo`|`Age.1st.INC`
+`Chance.Flu`|`Chance.HS.Diploma.20yo`|`Household.Sub.18yo`|`Household.Sub.6yo`
+
+In an effort to quickly rule out obvious multicollinearity, a multivariate analysis is taken for remaining continuous variables to do the first purge of correlated variables. Due to the size of the observations multivariate analysis will be completed in several stages. 
+
+Stage 1 - Inital Sweep
+```{r}
+Cont.var <- c("Age.1st.INC", "Length.Longest.INC",
+                      "Chance.Flu", "Chance.HS.Diploma.20yo", "Chance.Jail.20yo", "Chance.Parent.20yo",
+                      "Chance.Bach.Degree.30yo","Net.Worth.Parent", "MJ.Use.30days", 
+                      "Net.Worth.Student", "Weight.in.lbs", "Gross.Family.Income", 
+                      "Household.Size", "Household.Sub.18yo", "Household.Sub.6yo","Income", "Spouse.Income", 
+                      "Height.ft", "Height.in", "Weight.in.lbs2", "MJ.Use.30days2", 
+                      "Debt.by.20yo", "Njobs.14yo", "Njobs.20yo", "jobs.20plus", 
+                      "Debt.by.30yo")
+
+round(cor(NLSY97[,Cont.var]), 3)
+```
+Stage 2 - Confirmation of reduced variables with porition of data
+```{r}
+Cont.var2 <- c("Length.Longest.INC", "Chance.Jail.20yo", "Chance.Parent.20yo",
+                      "Chance.Bach.Degree.30yo","Net.Worth.Parent", "MJ.Use.30days", 
+                      "Net.Worth.Student", "Weight.in.lbs")
+
+panel.cor <- function(x, y, digits = 2, prefix = "", cex.cor, ...)
+{
+  usr <- par("usr"); on.exit(par(usr))
+  par(usr = c(0, 1, 0, 1))
+  r <- abs(cor(x, y))
+  txt <- format(c(r, 0.123456789), digits = digits)[1]
+  txt <- paste0(prefix, txt)
+  if(missing(cex.cor)) cex.cor <- 0.8/strwidth(txt)
+  text(0.5, 0.5, txt, cex = pmax(1, cex.cor * r))
+}
+
+pairs(NLSY97[,Cont.var2], lower.panel = panel.cor)
+```
+Stage 3 - Confirmation of reduced variables with remaining porition of data
+```{r}
+Cont.var3 <- c("Gross.Family.Income",  "Household.Size", "Income", "Spouse.Income", 
+                      "Height.ft", "Height.in", "Weight.in.lbs2", "MJ.Use.30days2", 
+                      "Debt.by.20yo", "Njobs.14yo", "jobs.20plus", "Debt.by.30yo")
+
+panel.cor <- function(x, y, digits = 2, prefix = "", cex.cor, ...)
+{
+  usr <- par("usr"); on.exit(par(usr))
+  par(usr = c(0, 1, 0, 1))
+  r <- abs(cor(x, y))
+  txt <- format(c(r, 0.123456789), digits = digits)[1]
+  txt <- paste0(prefix, txt)
+  if(missing(cex.cor)) cex.cor <- 0.8/strwidth(txt)
+  text(0.5, 0.5, txt, cex = pmax(1, cex.cor * r))
+}
+
+pairs(NLSY97[,Cont.var3], lower.panel = panel.cor)
+```
+
+Variables that were removed due to strong correlation to the remaining variable:
+`Household.Sub.18yo` and `Household.Sub.6yo` - `Household.Size`
+`Age.1st.INC` - `Length.Longest.INC`
+`Chance.Flu` and `Chance.HS.Diploma.20yo` - `Chance.Bach.Degree.30yo` 
+`Njobs.20yo` - `jobs.20plus`
+
+Discussion: 
+Many of these points, eg. `Household.Sub.18yo` and `Household.Sub.6yo` already have data represented in `Household.Size`. Additionally, the younger that someone is first arrested at a young age increased chances of being arrested on aggravating charges through adulthood. An interesting idea about higher chances of getting the flu from exposure to more germs in high population areas such as educational facilities. 
+
+####Continuous Variables: Methodology on Data Distribution
+
+Continuous variables are much more sensitive to skewed distributions and missing data since the statistical assessments are ranked by residual fit and variance. The data for negative value responses, -5, -4, -3, -2, -1, will be replaced by the aggregate means of the gender and total incarcerations for respondents, in order to gain better statistical insight on the significance of each of the variables.
+
+Variables that require negative observations
+Using the example of net worth as indicated by parent, `Net.Worth.Parent`, the following steps will demonstrate how to normalize variable distributions while isolating outliers and missing values when the negative values need to stay due to the nature of the survey responses. 
+```{r}
+summary(NLSY97$Net.Worth.Parent)
+hist(NLSY97$Net.Worth.Parent, col = "forestgreen", 
+     main = "Parental Net Worth Histogram",
+     xlab = "Parental Net Worth")
+```
+
+####Steps to normalizing distributions that contain negatives:
+
+1. Isolate non-responses with NA
+```{r}
+NLSY97$Net.Worth.Parent[NLSY97$Net.Worth.Parent >= -5 & NLSY97$Net.Worth.Parent <= -1] <- NA
+summary(NLSY97$Net.Worth.Parent)
+hist(NLSY97$Net.Worth.Parent, col = "forestgreen",
+     main = "Parental Net Worth Histogram",
+     xlab = "Parental Net Worth")
+```
+
+2. Locate and Replace Outliers
+Outliers are determined by values beyond 1.5 times the interquartile range. They are capped within the extremes 95% and 5% of observable IQR for the dataset. 
+```{r}
+New.Net.Worth.Parent <- NLSY97$Net.Worth.Parent
+qnt <- quantile(New.Net.Worth.Parent, probs=c(.25, .75), na.rm = TRUE)
+a.caps <- quantile(New.Net.Worth.Parent, probs=c(.05, .95), na.rm = TRUE)
+Outlier <- 1.5 * IQR(New.Net.Worth.Parent, na.rm = T)
+New.Net.Worth.Parent[New.Net.Worth.Parent < (qnt[1] - Outlier)] <- a.caps[1]
+New.Net.Worth.Parent[New.Net.Worth.Parent > (qnt[2] + Outlier)] <- a.caps[2]
+New.Net.Worth.Parent[New.Net.Worth.Parent < a.caps[1]] <- a.caps[1]
+New.Net.Worth.Parent[New.Net.Worth.Parent > a.caps[2]] <- a.caps[2]
+summary(New.Net.Worth.Parent)
+hist(New.Net.Worth.Parent, col = "forestgreen", 
+     main = "Parental Net Worth Histogram sans Outliers",
+     xlab = "Parental Net Worth sans Outliers")
+NLSY97 <- transform(NLSY97, 
+                    Net.Worth.Parent = New.Net.Worth.Parent)
+summary(NLSY97$Net.Worth.Parent)
+hist(NLSY97$Net.Worth.Parent, col = "forestgreen",
+     main = "Parental Net Worth Histogram",
+     xlab = "Parental Net Worth")
+```
+
+The outliers are replaced with the capped values, 95% is `r a.caps[2]` and 5% is `r a.caps[1]`. This way the outliers still contribute to the extreme edges of the data and the improved distribution will be transformed into the `NLSY97` dataset. 
+NAs are excluded to facilitate caluclation. 
+
+3. Replace Missing Values 
+Since the focus is on `Gender` and `Total.INC` and their relationship to `Income`, the NA values will be replaced with the aggregate means of each variable by `Gender` and `Total.INC`.
+```{r}
+u.Net.P <- with(NLSY97, tapply(Net.Worth.Parent, INDEX = list(Gender, Total.INC), FUN = mean, na.rm = TRUE))
+
+NLSY97$Net.Worth.Parent[is.na(NLSY97$Net.Worth.Parent & NLSY97$Gender == "Male" & NLSY97$Total.INC == 0)] <- u.Net.P[2,1]
+NLSY97$Net.Worth.Parent[is.na(NLSY97$Net.Worth.Parent & NLSY97$Gender == "Female" & NLSY97$Total.INC == 0)] <- u.Net.P[1,1]
+NLSY97$Net.Worth.Parent[is.na(NLSY97$Net.Worth.Parent & NLSY97$Gender == "Male" & NLSY97$Total.INC == 1)] <- u.Net.P[2,2]
+NLSY97$Net.Worth.Parent[is.na(NLSY97$Net.Worth.Parent & NLSY97$Gender == "Female" & NLSY97$Total.INC == 1)] <- u.Net.P[1,2]
+NLSY97$Net.Worth.Parent[is.na(NLSY97$Net.Worth.Parent & NLSY97$Gender == "Male" & NLSY97$Total.INC == 2)] <- u.Net.P[2,3]
+NLSY97$Net.Worth.Parent[is.na(NLSY97$Net.Worth.Parent & NLSY97$Gender == "Female" & NLSY97$Total.INC == 2)] <- u.Net.P[1,3]
+NLSY97$Net.Worth.Parent[is.na(NLSY97$Net.Worth.Parent & NLSY97$Gender == "Male" & NLSY97$Total.INC == "3+")] <- u.Net.P[2,4]
+NLSY97$Net.Worth.Parent[is.na(NLSY97$Net.Worth.Parent & NLSY97$Gender == "Female" & NLSY97$Total.INC == "3+")] <- u.Net.P[1,4]
+summary(NLSY97$Net.Worth.Parent)
+hist(NLSY97$Net.Worth.Parent, col = "forestgreen",
+     main = "Parental Net Worth Histogram",
+     xlab = "Parental Net Worth")
+
+```
+
+The cleaned ovbservations are now ready to be used in exploratory analysis. 
+
+####Variables that do not require negative observations
+
+Using the example of length of longest incarceration, `Length.Longest.INC`, the following steps will demonstrate how to normalize variable distributions while isolating outliers and missing values when the negative values need to stay due to the nature of the survey responses. 
+
+The majority of continuous vairables will follow this pattern of cleaning data. 
+
+```{r}
+summary(NLSY97$Length.Longest.INC)
+hist(NLSY97$Length.Longest.INC, col = "gray",
+     main = "Histogram of Length of Longest Incarceration",
+     xlab = "Length of Longest Incarceration")
+```
+
+Examining the data, the negative values equate to "Non-Interview", "Skip", "Invalid Skip", "Didn't Know", or "Refusal" observations. These values will be converted to NAs and ultimately replaced with mean values of `Gender` by `Total.INC`. 
+
+1. Transition negatives to NA
+```{r}
+NLSY97$Length.Longest.INC[NLSY97$Length.Longest.INC < 0] <- NA
+summary(NLSY97$Length.Longest.INC)
+hist(NLSY97$Length.Longest.INC, col = "gray",
+     main = "Histogram of Length of Longest Incarceration",
+     xlab = "Length of Longest Incarceration")
+```
+
+2. Isolate Outliers and replace with Cap values
+
+```{r}
+New.Length.Longest.INC <- NLSY97$Length.Longest.INC
+qnt <- quantile(New.Length.Longest.INC, probs=c(.25, .75), na.rm = TRUE)
+e.caps <- quantile(New.Length.Longest.INC, probs=c(.05, .95), na.rm = TRUE)
+Outlier <- 1.5 * IQR(New.Length.Longest.INC, na.rm = TRUE)
+e.caps[1]
+e.caps[2]
+New.Length.Longest.INC[New.Length.Longest.INC < (qnt[1] - Outlier)] <- e.caps[1]
+New.Length.Longest.INC[New.Length.Longest.INC > (qnt[2] + Outlier)] <- e.caps[2]
+New.Length.Longest.INC[New.Length.Longest.INC > e.caps[2]] <- e.caps[2]
+NLSY97 <- transform(NLSY97, 
+                    Length.Longest.INC = New.Length.Longest.INC)
+summary(NLSY97$Length.Longest.INC)
+hist(NLSY97$Length.Longest.INC, col = "gray",
+     main = "Histogram of Length of Longest Incarceration",
+     xlab = "Length of Longest Incarceration")
+```
+
+
+3. Determine replacement values for NAs based on the relationship between `Gender` and `Total.INC` 
+
+```{r}
+u.INC <- round(with(NLSY97, tapply(Length.Longest.INC, INDEX = list(Gender, Total.INC), FUN = mean, na.rm = TRUE)), 2)
+u.INC[u.INC == "NaN"] <- 0
+u.INC
+```
+
+4. Input replacement values based on the 
+
+```{r}
+NLSY97$Length.Longest.INC[is.na(NLSY97$Length.Longest.INC & NLSY97$Gender == "Male" & NLSY97$Total.INC == 0)] <- u.INC[2,1]
+NLSY97$Length.Longest.INC[is.na(NLSY97$Length.Longest.INC & NLSY97$Gender == "Female" & NLSY97$Total.INC == 0)] <- u.INC[1,1]
+NLSY97$Length.Longest.INC[is.na(NLSY97$Length.Longest.INC & NLSY97$Gender == "Male" & NLSY97$Total.INC == 1)] <- u.INC[2,2]
+NLSY97$Length.Longest.INC[is.na(NLSY97$Length.Longest.INC & NLSY97$Gender == "Female" & NLSY97$Total.INC == 1)] <- u.INC[1,2]
+NLSY97$Length.Longest.INC[is.na(NLSY97$Length.Longest.INC & NLSY97$Gender == "Male" & NLSY97$Total.INC == 2)] <- u.INC[2,3]
+NLSY97$Length.Longest.INC[is.na(NLSY97$Length.Longest.INC & NLSY97$Gender == "Female" & NLSY97$Total.INC == 2)] <- u.INC[1,3]
+NLSY97$Length.Longest.INC[is.na(NLSY97$Length.Longest.INC & NLSY97$Gender == "Male" & NLSY97$Total.INC == "3+")] <- u.INC[2,4]
+NLSY97$Length.Longest.INC[is.na(NLSY97$Length.Longest.INC & NLSY97$Gender == "Female" & NLSY97$Total.INC == "3+")] <- u.INC[1,4]
+
+summary(NLSY97$Length.Longest.INC)
+
+hist(NLSY97$Length.Longest.INC, col = "gray",
+     main = "Histogram of Length of Longest Incarceration",
+     xlab = "Length of Longest Incarceration")
+
+qplot(x=Total.INC, y=Length.Longest.INC, data=NLSY97, 
+      colour=Gender, 
+      shape=Gender,
+      main = "Total Incarcerations by Longest Length weighted by Gender",
+      xlab = "Total Number of Incarcerations",
+      ylab = "Length.Longest.INC")
+
+```
+
+We do not need to revisit the outlier clean up because there is significant observations in respect to `Gender` and `Total.INC`. 
+
+####Continuous Observations of Percentages
+
+When evaluated as a percent, this analysis is maintaining the extreme values and not considering outliers. Therefore, the treament of variables evaluating percentages of something happening are managed differently than the previous two examples. 
+
+Using the variable, `Chance.Jail.20yo`, the cleaning of the data will be managed by the following steps:
+
+1. Identify distribution
+```{r echo=FALSE, results='hide',message=FALSE}
+summary(NLSY97$Chance.Jail.20yo)
+hist(NLSY97$Chance.Jail.20yo, col = "darkgray",
+     main = "Histogram of Percent Chance of Incarceration by 20 years old",
+      xlab = "Percent Chance of Incarceration by 20 years old")
+```
+
+2. Evaluate new spread and replace negative observations with NA
+```{r echo=FALSE, results='hide',message=FALSE}
+NLSY97$Chance.Jail.20yo[NLSY97$Chance.Jail.20yo < 0] <- NA
+summary(NLSY97$Chance.Jail.20yo)
+hist(NLSY97$Chance.Jail.20yo,col = "darkgray",
+     main = "Histogram of Percent Chance of Incarceration by 20 years old",
+      xlab = "Percent Chance of Incarceration by 20 years old")
+```
+
+3. Replace NA values by mean of relationship to `Gender` and `Total.INC`
+```{r echo=FALSE, results='hide',message=FALSE}
+u.PCJ <- with(NLSY97, tapply(Chance.Jail.20yo, INDEX = list(Gender, Total.INC), FUN = mean, na.rm = TRUE))
+
+NLSY97$Chance.Jail.20yo[is.na(NLSY97$Chance.Jail.20yo & NLSY97$Gender == "Male" & NLSY97$Total.INC == 0)] <- u.PCJ[2,1]
+NLSY97$Chance.Jail.20yo[is.na(NLSY97$Chance.Jail.20yo & NLSY97$Gender == "Female" & NLSY97$Total.INC == 0)] <- u.PCJ[1,1]
+NLSY97$Chance.Jail.20yo[is.na(NLSY97$Chance.Jail.20yo & NLSY97$Gender == "Male" & NLSY97$Total.INC == 1)] <- u.PCJ[2,2]
+NLSY97$Chance.Jail.20yo[is.na(NLSY97$Chance.Jail.20yo& NLSY97$Gender == "Female" & NLSY97$Total.INC == 1)] <- u.PCJ[1,2]
+NLSY97$Chance.Jail.20yo[is.na(NLSY97$Chance.Jail.20yo & NLSY97$Gender == "Male" & NLSY97$Total.INC == 2)] <- u.PCJ[2,3]
+NLSY97$Chance.Jail.20yo[is.na(NLSY97$Chance.Jail.20yo & NLSY97$Gender == "Female" & NLSY97$Total.INC == 2)] <- u.PCJ[1,3]
+NLSY97$Chance.Jail.20yo[is.na(NLSY97$Chance.Jail.20yo & NLSY97$Gender == "Male" & NLSY97$Total.INC == "3+")] <- u.PCJ[2,4]
+NLSY97$Chance.Jail.20yo[is.na(NLSY97$Chance.Jail.20yo & NLSY97$Gender == "Female" & NLSY97$Total.INC == "3+")] <- u.PCJ[1,4]
+
+summary(NLSY97$Chance.Jail.20yo)
+hist(NLSY97$Chance.Jail.20yo, col = "darkgray",
+     main = "Histogram of Percent Chance of Incarceration by 20 years old",
+      xlab = "Percent Chance of Incarceration by 20 years old")
+```
+The variables based on percent chance were classified as continuous variables due to how the unit degree chance in variation of percentages applies to the response variables. 
+
+Continuous Variables treated similar to `Net.Worth.Parent`:
+`Net.Worth.Student`|`Income`|`Spouse.Income`|`Gross.Family.Income`
+
+####Cleaned Distribution of Data 
+
+```{r echo=FALSE, results='hide',message=FALSE}
+NLSY97$Net.Worth.Student[NLSY97$Net.Worth.Student >= -5 & NLSY97$Net.Worth.Student <= -1] <- NA
+New.Net.Worth.Student <- NLSY97$Net.Worth.Student
+qnt <- quantile(New.Net.Worth.Student, probs=c(.25, .75), na.rm = TRUE)
+caps <- quantile(New.Net.Worth.Student, probs=c(.05, .95), na.rm = TRUE)
+Outlier <- 1.5 * IQR(New.Net.Worth.Student, na.rm = T)
+New.Net.Worth.Student[New.Net.Worth.Student < (qnt[1] - Outlier)] <- caps[1]
+New.Net.Worth.Student[New.Net.Worth.Student > (qnt[2] + Outlier)] <- caps[2]
+New.Net.Worth.Student[New.Net.Worth.Student < caps[1]] <- caps[1]
+New.Net.Worth.Student[New.Net.Worth.Student > caps[2]] <- caps[2]
+NLSY97 <- transform(NLSY97, 
+                    Net.Worth.Student = New.Net.Worth.Student)
+u.Net.S <- round(with(NLSY97, tapply(Net.Worth.Student, INDEX = list(Gender, Total.INC), FUN = mean, na.rm = TRUE)), 2)
+NLSY97$Net.Worth.Student[is.na(NLSY97$Net.Worth.Student & NLSY97$Gender == "Male" & NLSY97$Total.INC == 0)] <- u.Net.S[2,1]
+NLSY97$Net.Worth.Student[is.na(NLSY97$Net.Worth.Student & NLSY97$Gender == "Female" & NLSY97$Total.INC == 0)] <- u.Net.S[1,1]
+NLSY97$Net.Worth.Student[is.na(NLSY97$Net.Worth.Student & NLSY97$Gender == "Male" & NLSY97$Total.INC == 1)] <- u.Net.S[2,2]
+NLSY97$Net.Worth.Student[is.na(NLSY97$Net.Worth.Student & NLSY97$Gender == "Female" & NLSY97$Total.INC == 1)] <- u.Net.S[1,2]
+NLSY97$Net.Worth.Student[is.na(NLSY97$Net.Worth.Student & NLSY97$Gender == "Male" & NLSY97$Total.INC == 2)] <- u.Net.S[2,3]
+NLSY97$Net.Worth.Student[is.na(NLSY97$Net.Worth.Student & NLSY97$Gender == "Female" & NLSY97$Total.INC == 2)] <- u.Net.S[1,3]
+NLSY97$Net.Worth.Student[is.na(NLSY97$Net.Worth.Student & NLSY97$Gender == "Male" & NLSY97$Total.INC == "3+")] <- u.Net.S[2,4]
+NLSY97$Net.Worth.Student[is.na(NLSY97$Net.Worth.Student & NLSY97$Gender == "Female" & NLSY97$Total.INC == "3+")] <- u.Net.S[1,4]
+hist(NLSY97$Net.Worth.Student, col = "forestgreen",
+     main = "Perceived Parental Net Worth by Respondant Histogram",
+     xlab = "Perceived Parental Net Worth by Respondant")
+```
+
+```{r echo=FALSE, results='hide',message=FALSE}
+NLSY97$Gross.Family.Income[NLSY97$Gross.Family.Income >= -5 & NLSY97$Gross.Family.Income <= -1] <- NA
+New.Gross.Family.Income <- NLSY97$Gross.Family.Income
+qnt <- quantile(New.Gross.Family.Income, probs=c(.25, .75), na.rm = TRUE)
+caps <- quantile(New.Gross.Family.Income, probs=c(.05, .95), na.rm = TRUE)
+Outlier <- 1.5 * IQR(New.Gross.Family.Income, na.rm = T)
+New.Gross.Family.Income[New.Gross.Family.Income < (qnt[1] - Outlier)] <- caps[1]
+New.Gross.Family.Income[New.Gross.Family.Income > (qnt[2] + Outlier)] <- caps[2]
+New.Gross.Family.Income[New.Gross.Family.Income < caps[1]] <- caps[1]
+New.Gross.Family.Income[New.Gross.Family.Income > caps[2]] <- caps[2]
+NLSY97 <- transform(NLSY97, 
+                   Gross.Family.Income = New.Gross.Family.Income)
+u.GI <- round(with(NLSY97, tapply(Gross.Family.Income, INDEX = list(Gender, Total.INC), FUN = mean, na.rm = TRUE)), 2)
+NLSY97$Gross.Family.Income[is.na(NLSY97$Gross.Family.Income & NLSY97$Gender == "Male" & NLSY97$Total.INC == 0)] <- u.GI[2,1]
+NLSY97$Gross.Family.Income[is.na(NLSY97$Gross.Family.Income & NLSY97$Gender == "Female" & NLSY97$Total.INC == 0)] <- u.GI[1,1]
+NLSY97$Gross.Family.Income[is.na(NLSY97$Gross.Family.Income & NLSY97$Gender == "Male" & NLSY97$Total.INC == 1)] <- u.GI[2,2]
+NLSY97$Gross.Family.Income[is.na(NLSY97$Gross.Family.Income & NLSY97$Gender == "Female" & NLSY97$Total.INC == 1)] <- u.GI[1,2]
+NLSY97$Gross.Family.Income[is.na(NLSY97$Gross.Family.Income & NLSY97$Gender == "Male" & NLSY97$Total.INC == 2)] <- u.GI[2,3]
+NLSY97$Gross.Family.Income[is.na(NLSY97$Gross.Family.Income & NLSY97$Gender == "Female" & NLSY97$Total.INC == 2)] <- u.GI[1,3]
+NLSY97$Gross.Family.Income[is.na(NLSY97$Gross.Family.Income & NLSY97$Gender == "Male" & NLSY97$Total.INC == "3+")] <- u.GI[2,4]
+NLSY97$Gross.Family.Income[is.na(NLSY97$Gross.Family.Income & NLSY97$Gender == "Female" & NLSY97$Total.INC == "3+")] <- u.GI[1,4]
+hist(NLSY97$Gross.Family.Income, col = "purple",
+     main = "Histogram of Gross Family Income",
+     xlab = "Gross Family Income")
+```
+
+```{r echo=FALSE, results='hide',message=FALSE}
+NLSY97$Income[NLSY97$Income >= -5 & NLSY97$Income <= -1] <- NA
+New.Income <- NLSY97$Income
+qnt <- quantile(New.Income, probs=c(.25, .75), na.rm = TRUE)
+caps <- quantile(New.Income, probs=c(.05, .95), na.rm = TRUE)
+Outlier <- 1.5 * IQR(New.Income, na.rm = TRUE)
+New.Income[New.Income < (qnt[1] - Outlier)] <- caps[1]
+New.Income[New.Income > (qnt[2] + Outlier)] <- caps[2]
+New.Income[New.Income < caps[1]] <- caps[1]
+New.Income[New.Income > caps[2]] <- caps[2]
+NLSY97 <- transform(NLSY97, 
+                   Income = New.Income)
+u.I <- round(with(NLSY97, tapply(Income, INDEX = list(Gender, Total.INC), FUN = mean, na.rm = TRUE)), 2)
+NLSY97$Income[is.na(NLSY97$Income & NLSY97$Gender == "Male" & NLSY97$Total.INC == 0)] <- u.I[2,1]
+NLSY97$Income[is.na(NLSY97$Income & NLSY97$Gender == "Female" & NLSY97$Total.INC == 0)] <- u.I[1,1]
+NLSY97$Income[is.na(NLSY97$Income & NLSY97$Gender == "Male" & NLSY97$Total.INC == 1)] <- u.I[2,2]
+NLSY97$Income[is.na(NLSY97$Income & NLSY97$Gender == "Female" & NLSY97$Total.INC == 1)] <- u.I[1,2]
+NLSY97$Income[is.na(NLSY97$Income & NLSY97$Gender == "Male" & NLSY97$Total.INC == 2)] <- u.I[2,3]
+NLSY97$Income[is.na(NLSY97$Income & NLSY97$Gender == "Female" & NLSY97$Total.INC == 2)] <- u.I[1,3]
+NLSY97$Income[is.na(NLSY97$Income & NLSY97$Gender == "Male" & NLSY97$Total.INC == "3+")] <- u.I[2,4]
+NLSY97$Income[is.na(NLSY97$Income & NLSY97$Gender == "Female" & NLSY97$Total.INC == "3+")] <- u.I[1,4]
+hist(NLSY97$Income, col = "navyblue",
+     main = "Histogram of Respondent Income",
+     xlab = "Respondent Income")
+
+```
+
+```{r echo=FALSE, results='hide',message=FALSE}
+NLSY97$Spouse.Income[NLSY97$Spouse.Income >= -5 & NLSY97$Spouse.Income <= -1] <- NA
+New.Spouse.Income <- NLSY97$Spouse.Income
+qnt <- quantile(New.Spouse.Income, probs=c(.25, .75), na.rm = TRUE)
+caps <- quantile(New.Spouse.Income, probs=c(.05, .95), na.rm = TRUE)
+Outlier <- 1.5 * IQR(New.Spouse.Income, na.rm = T)
+New.Spouse.Income[New.Spouse.Income < (qnt[1] - Outlier)] <- caps[1]
+New.Spouse.Income[New.Spouse.Income > (qnt[2] + Outlier)] <- caps[2]
+New.Spouse.Income[New.Spouse.Income < caps[1]] <- caps[1]
+New.Spouse.Income[New.Spouse.Income > caps[2]] <- caps[2]
+NLSY97 <- transform(NLSY97, 
+                    Spouse.Income = New.Spouse.Income)
+u.SI <- round(with(NLSY97, tapply(Spouse.Income, INDEX = list(Gender, Total.INC), FUN = mean, na.rm = TRUE)), 2)
+NLSY97$Spouse.Income[is.na(NLSY97$Spouse.Income & NLSY97$Gender == "Male" & NLSY97$Total.INC == 0)] <- u.SI[2,1]
+NLSY97$Spouse.Income[is.na(NLSY97$Spouse.Income & NLSY97$Gender == "Female" & NLSY97$Total.INC == 0)] <- u.SI[1,1]
+NLSY97$Spouse.Income[is.na(NLSY97$Spouse.Income & NLSY97$Gender == "Male" & NLSY97$Total.INC == 1)] <- u.SI[2,2]
+NLSY97$Spouse.Income[is.na(NLSY97$Spouse.Income & NLSY97$Gender == "Female" & NLSY97$Total.INC == 1)] <- u.SI[1,2]
+NLSY97$Spouse.Income[is.na(NLSY97$Spouse.Income & NLSY97$Gender == "Male" & NLSY97$Total.INC == 2)] <- u.SI[2,3]
+NLSY97$Spouse.Income[is.na(NLSY97$Spouse.Income & NLSY97$Gender == "Female" & NLSY97$Total.INC == 2)] <- u.SI[1,3]
+NLSY97$Spouse.Income[is.na(NLSY97$Spouse.Income & NLSY97$Gender == "Male" & NLSY97$Total.INC == "3+")] <- u.SI[2,4]
+NLSY97$Spouse.Income[is.na(NLSY97$Spouse.Income & NLSY97$Gender == "Female" & NLSY97$Total.INC == "3+")] <- u.SI[1,4]
+hist(NLSY97$Spouse.Income, col = "lightblue",
+     main = "Histogram of Respondent's Spousal Income",
+     xlab = "Respondent's Spousal Income")
+```
+
+Continuous Variables treated similar to `Length.Longest.INC`:
+`MJ.Use.30days`|`Weight.in.lbs`|`Household.Size`|`Height.in`|`Height.ft`|`Weight.in.lbs2`|`MJ.Use.30days2`
+`Debt.by.20yo`|`Njobs.14yo`|`Njobs.20yo`|`Debt.by.30yo`|`Age.1st.INC`|`Chance.Flu`|`Chance.HS.Diploma.20yo`
+`Household.Sub.18yo`|`Household.Sub.6yo`
+
+```{r echo=FALSE, results='hide',message=FALSE}
+NLSY97$MJ.Use.30days[NLSY97$MJ.Use.30days < 0] <- NA
+New.MJ.Use.30days <- NLSY97$MJ.Use.30days
+qnt <- quantile(New.MJ.Use.30days, probs=c(.25, .75), na.rm = TRUE)
+e.caps <- quantile(New.MJ.Use.30days, probs=c(.05, .95), na.rm = TRUE)
+Outlier.max <- 1.5 * IQR(New.MJ.Use.30days, na.rm = TRUE)
+New.MJ.Use.30days[New.MJ.Use.30days > (qnt[2] + Outlier.max)] <- e.caps[2]
+NLSY97 <- transform(NLSY97, 
+                    MJ.Use.30days = New.MJ.Use.30days)
+
+u.MJ <- round(with(NLSY97, tapply(MJ.Use.30days, INDEX = list(Gender, Total.INC), FUN = mean, na.rm = TRUE)), 2)
+
+NLSY97$MJ.Use.30days [is.na(NLSY97$MJ.Use.30days  & NLSY97$Gender == "Male" & NLSY97$Total.INC == 0)] <- u.MJ[2,1]
+NLSY97$MJ.Use.30days [is.na(NLSY97$MJ.Use.30days  & NLSY97$Gender == "Female" & NLSY97$Total.INC == 0)] <- u.MJ[1,1]
+NLSY97$MJ.Use.30days [is.na(NLSY97$MJ.Use.30days  & NLSY97$Gender == "Male" & NLSY97$Total.INC == 1)] <- u.MJ[2,2]
+NLSY97$MJ.Use.30days [is.na(NLSY97$MJ.Use.30days  & NLSY97$Gender == "Female" & NLSY97$Total.INC == 1)] <- u.MJ[1,2]
+NLSY97$MJ.Use.30days [is.na(NLSY97$MJ.Use.30days  & NLSY97$Gender == "Male" & NLSY97$Total.INC == 2)] <- u.MJ[2,3]
+NLSY97$MJ.Use.30days [is.na(NLSY97$MJ.Use.30days  & NLSY97$Gender == "Female" & NLSY97$Total.INC == 2)] <- u.MJ[1,3]
+NLSY97$MJ.Use.30days [is.na(NLSY97$MJ.Use.30days  & NLSY97$Gender == "Male" & NLSY97$Total.INC == "3+")] <- u.MJ[2,4]
+NLSY97$MJ.Use.30days [is.na(NLSY97$MJ.Use.30days  & NLSY97$Gender == "Female" & NLSY97$Total.INC == "3+")] <- u.MJ[1,4]
+hist(NLSY97$MJ.Use.30days, col = "yellow",
+     main = "Histogram of Respondent'sMarijuana Use Past 30 days in 2004",
+     xlab = "Respondent's Marijuana Use Past 30 days in 2004")
+
+```
+
+```{r echo=FALSE, results='hide',message=FALSE}
+NLSY97$MJ.Use.30days2[NLSY97$MJ.Use.30days2 < 0] <- NA
+New.MJ.Use.30days2 <- NLSY97$MJ.Use.30days2
+qnt <- quantile(New.MJ.Use.30days2, probs=c(.25, .75), na.rm = TRUE)
+e.caps <- quantile(New.MJ.Use.30days2, probs=c(.05, .95), na.rm = TRUE)
+Outlier.max <- 1.5 * IQR(New.MJ.Use.30days2, na.rm = TRUE)
+New.MJ.Use.30days2[New.MJ.Use.30days2 > (qnt[2] + Outlier.max)] <- e.caps[2]
+New.MJ.Use.30days2[New.MJ.Use.30days2 > e.caps[2]] <- e.caps[2]
+NLSY97 <- transform(NLSY97, 
+                    MJ.Use.30days2 = New.MJ.Use.30days2)
+u.MJ2 <- round(with(NLSY97, tapply(MJ.Use.30days, INDEX = list(Gender, Total.INC), FUN = mean, na.rm = TRUE)), 2)
+NLSY97$MJ.Use.30days2 [is.na(NLSY97$MJ.Use.30days2  & NLSY97$Gender == "Male" & NLSY97$Total.INC == 0)] <- u.MJ2[2,1]
+NLSY97$MJ.Use.30days2 [is.na(NLSY97$MJ.Use.30days2  & NLSY97$Gender == "Female" & NLSY97$Total.INC == 0)] <- u.MJ2[1,1]
+NLSY97$MJ.Use.30days2 [is.na(NLSY97$MJ.Use.30days2  & NLSY97$Gender == "Male" & NLSY97$Total.INC == 1)] <- u.MJ2[2,2]
+NLSY97$MJ.Use.30days2 [is.na(NLSY97$MJ.Use.30days2  & NLSY97$Gender == "Female" & NLSY97$Total.INC == 1)] <- u.MJ2[1,2]
+NLSY97$MJ.Use.30days2 [is.na(NLSY97$MJ.Use.30days2  & NLSY97$Gender == "Male" & NLSY97$Total.INC == 2)] <- u.MJ2[2,3]
+NLSY97$MJ.Use.30days2 [is.na(NLSY97$MJ.Use.30days2  & NLSY97$Gender == "Female" & NLSY97$Total.INC == 2)] <- u.MJ2[1,3]
+NLSY97$MJ.Use.30days2 [is.na(NLSY97$MJ.Use.30days2  & NLSY97$Gender == "Male" & NLSY97$Total.INC == "3+")] <- u.MJ2[2,4]
+NLSY97$MJ.Use.30days2 [is.na(NLSY97$MJ.Use.30days2  & NLSY97$Gender == "Female" & NLSY97$Total.INC == "3+")] <- u.MJ2[1,4]
+hist(NLSY97$MJ.Use.30days2, col = "magenta",
+     main = "Histogram of Respondent's Marijuana Use Past 30 days in 2011",
+     xlab = "Respondent's Marijuana Use Past 30 days in 2011")
+```
+
+```{r echo=FALSE, results='hide',message=FALSE}
+NLSY97$Weight.in.lbs[NLSY97$Weight.in.lbs < 0] <- NA
+New.Weight.in.lbs <- NLSY97$Weight.in.lbs
+qnt <- quantile(New.Weight.in.lbs, probs=c(.25, .75), na.rm = TRUE)
+e.caps <- quantile(New.Weight.in.lbs, probs=c(.05, .95), na.rm = TRUE)
+Outlier <- 1.5 * IQR(New.Weight.in.lbs, na.rm = TRUE)
+New.Weight.in.lbs[New.Weight.in.lbs < (qnt[1] - Outlier)] <- e.caps[1]
+New.Weight.in.lbs[New.Weight.in.lbs > (qnt[2] + Outlier)] <- e.caps[2]
+New.Weight.in.lbs[New.Weight.in.lbs < e.caps[1]] <- e.caps[1]
+New.Weight.in.lbs[New.Weight.in.lbs > e.caps[2]] <- e.caps[2]
+NLSY97 <- transform(NLSY97, 
+                    Weight.in.lbs = New.Weight.in.lbs)
+u.WT <- round(with(NLSY97, tapply(Weight.in.lbs, INDEX = list(Gender, Total.INC), FUN = mean, na.rm = TRUE)), 2)
+
+NLSY97$Weight.in.lbs [is.na(NLSY97$Weight.in.lbs  & NLSY97$Gender == "Male" & NLSY97$Total.INC == 0)] <- u.WT[2,1]
+NLSY97$Weight.in.lbs [is.na(NLSY97$Weight.in.lbs  & NLSY97$Gender == "Female" & NLSY97$Total.INC == 0)] <- u.WT[1,1]
+NLSY97$Weight.in.lbs [is.na(NLSY97$Weight.in.lbs  & NLSY97$Gender == "Male" & NLSY97$Total.INC == 1)] <- u.WT[2,2]
+NLSY97$Weight.in.lbs [is.na(NLSY97$Weight.in.lbs  & NLSY97$Gender == "Female" & NLSY97$Total.INC == 1)] <- u.WT[1,2]
+NLSY97$Weight.in.lbs[is.na(NLSY97$Weight.in.lbs  & NLSY97$Gender == "Male" & NLSY97$Total.INC == 2)] <- u.WT[2,3]
+NLSY97$Weight.in.lbs [is.na(NLSY97$Weight.in.lbs & NLSY97$Gender == "Female" & NLSY97$Total.INC == 2)] <- u.WT[1,3]
+NLSY97$Weight.in.lbs [is.na(NLSY97$Weight.in.lbs  & NLSY97$Gender == "Male" & NLSY97$Total.INC == "3+")] <- u.WT[2,4]
+NLSY97$Weight.in.lbs [is.na(NLSY97$Weight.in.lbs  & NLSY97$Gender == "Female" & NLSY97$Total.INC == "3+")] <- u.WT[1,4]
+hist(NLSY97$Weight.in.lbs, col = "orange",
+     main = "Histogram of Respondent's Weight in lbs in 2004",
+     xlab = "Respondent's Weight in lbs in 2004")
+```
+
+```{r echo=FALSE, results='hide',message=FALSE}
+NLSY97$Weight.in.lbs2[NLSY97$Weight.in.lbs2 < 0] <- NA
+New.Weight.in.lbs2 <- NLSY97$Weight.in.lbs2
+qnt <- quantile(New.Weight.in.lbs2, probs=c(.25, .75), na.rm = TRUE)
+e.caps <- quantile(New.Weight.in.lbs2, probs=c(.05, .95), na.rm = TRUE)
+Outlier <- 1.5 * IQR(New.Weight.in.lbs2, na.rm = TRUE)
+New.Weight.in.lbs2[New.Weight.in.lbs2 < (qnt[1] - Outlier)] <- e.caps[1]
+New.Weight.in.lbs2[New.Weight.in.lbs2 > (qnt[2] + Outlier)] <- e.caps[2]
+New.Weight.in.lbs2[New.Weight.in.lbs2 < e.caps[1]] <- e.caps[1]
+New.Weight.in.lbs2[New.Weight.in.lbs2 > e.caps[2]] <- e.caps[2]
+NLSY97 <- transform(NLSY97, 
+                    Weight.in.lbs2 = New.Weight.in.lbs2)
+u.WT2 <- round(with(NLSY97, tapply(Weight.in.lbs2, INDEX = list(Gender, Total.INC), FUN = mean, na.rm = TRUE)), 2)
+
+NLSY97$Weight.in.lbs2 [is.na(NLSY97$Weight.in.lbs  & NLSY97$Gender == "Male" & NLSY97$Total.INC == 0)] <- u.WT2[2,1]
+NLSY97$Weight.in.lbs2 [is.na(NLSY97$Weight.in.lbs  & NLSY97$Gender == "Female" & NLSY97$Total.INC == 0)] <- u.WT2[1,1]
+NLSY97$Weight.in.lbs2 [is.na(NLSY97$Weight.in.lbs  & NLSY97$Gender == "Male" & NLSY97$Total.INC == 1)] <- u.WT2[2,2]
+NLSY97$Weight.in.lbs2 [is.na(NLSY97$Weight.in.lbs  & NLSY97$Gender == "Female" & NLSY97$Total.INC == 1)] <- u.WT2[1,2]
+NLSY97$Weight.in.lbs2 [is.na(NLSY97$Weight.in.lbs  & NLSY97$Gender == "Male" & NLSY97$Total.INC == 2)] <- u.WT2[2,3]
+NLSY97$Weight.in.lbs2 [is.na(NLSY97$Weight.in.lbs & NLSY97$Gender == "Female" & NLSY97$Total.INC == 2)] <- u.WT2[1,3]
+NLSY97$Weight.in.lbs2 [is.na(NLSY97$Weight.in.lbs  & NLSY97$Gender == "Male" & NLSY97$Total.INC == "3+")] <- u.WT2[2,4]
+NLSY97$Weight.in.lbs2 [is.na(NLSY97$Weight.in.lbs  & NLSY97$Gender == "Female" & NLSY97$Total.INC == "3+")] <- u.WT2[1,4]
+hist(NLSY97$Weight.in.lbs2, col = "violet",
+     main = "Histogram of Respondent's Weight in lbs in 2011",
+     xlab = "Respondent's Weight in lbs in 2011")
+```
+```{r echo=FALSE, results='hide',message=FALSE}
+NLSY97$Debt.by.20yo[NLSY97$Debt.by.20yo < 0] <- NA
+New.Debt.by.20yo <- NLSY97$Debt.by.20yo
+qnt <- quantile(New.Debt.by.20yo, probs=c(.25, .75), na.rm = TRUE)
+e.caps <- quantile(New.Debt.by.20yo, probs=c(.2, .8), na.rm = TRUE)
+Outlier <- 1.5 * IQR(New.Debt.by.20yo, na.rm = TRUE)
+New.Debt.by.20yo[New.Debt.by.20yo < (qnt[1] - Outlier)] <- e.caps[1]
+New.Debt.by.20yo[New.Debt.by.20yo > (qnt[2] + Outlier)] <- e.caps[2]
+New.Debt.by.20yo[New.Debt.by.20yo < e.caps[1]] <- e.caps[1]
+New.Debt.by.20yo[New.Debt.by.20yo > e.caps[2]] <- e.caps[2]
+NLSY97 <- transform(NLSY97, 
+                    Debt.by.20yo = New.Debt.by.20yo)
+u.DB2 <- round(with(NLSY97, tapply(Debt.by.20yo, INDEX = list(Gender, Total.INC), FUN = mean, na.rm = TRUE)), 2)
+
+NLSY97$Debt.by.20yo [is.na(NLSY97$Debt.by.20yo  & NLSY97$Gender == "Male" & NLSY97$Total.INC == 0)] <- u.DB2[2,1]
+NLSY97$Debt.by.20yo [is.na(NLSY97$Debt.by.20yo  & NLSY97$Gender == "Female" & NLSY97$Total.INC == 0)] <- u.DB2[1,1]
+NLSY97$Debt.by.20yo [is.na(NLSY97$Debt.by.20yo  & NLSY97$Gender == "Male" & NLSY97$Total.INC == 1)] <- u.DB2[2,2]
+NLSY97$Debt.by.20yo [is.na(NLSY97$Debt.by.20yo  & NLSY97$Gender == "Female" & NLSY97$Total.INC == 1)] <- u.DB2[1,2]
+NLSY97$Debt.by.20yo [is.na(NLSY97$Debt.by.20yo  & NLSY97$Gender == "Male" & NLSY97$Total.INC == 2)] <- u.DB2[2,3]
+NLSY97$Debt.by.20yo [is.na(NLSY97$Debt.by.20yo & NLSY97$Gender == "Female" & NLSY97$Total.INC == 2)] <- u.DB2[1,3]
+NLSY97$Debt.by.20yo [is.na(NLSY97$Debt.by.20yo  & NLSY97$Gender == "Male" & NLSY97$Total.INC == "3+")] <- u.DB2[2,4]
+NLSY97$Debt.by.20yo [is.na(NLSY97$Debt.by.20yo  & NLSY97$Gender == "Female" & NLSY97$Total.INC == "3+")] <- u.DB2[1,4]
+hist(NLSY97$Debt.by.20yo, col = "coral",
+     main = "Histogram of Respondent's Debt by 20 years old",
+     xlab = "Respondent's Debt by 20 years old")
+```
+
+```{r echo=FALSE, results='hide',message=FALSE}
+NLSY97$Debt.by.30yo[NLSY97$Debt.by.30yo < 0] <- NA
+New.Debt.by.30yo <- NLSY97$Debt.by.30yo
+qnt <- quantile(New.Debt.by.30yo, probs=c(.25, .75), na.rm = TRUE)
+e.caps <- quantile(New.Debt.by.30yo, probs=c(.2, .8), na.rm = TRUE)
+Outlier <- 1.5 * IQR(New.Debt.by.30yo, na.rm = TRUE)
+New.Debt.by.30yo[New.Debt.by.30yo < (qnt[1] - Outlier)] <- e.caps[1]
+New.Debt.by.30yo[New.Debt.by.30yo > (qnt[2] + Outlier)] <- e.caps[2]
+New.Debt.by.30yo[New.Debt.by.30yo < e.caps[1]] <- e.caps[1]
+New.Debt.by.30yo[New.Debt.by.30yo > e.caps[2]] <- e.caps[2]
+NLSY97 <- transform(NLSY97, 
+                    Debt.by.30yo = New.Debt.by.30yo)
+u.DB3 <- round(with(NLSY97, tapply(Debt.by.30yo, INDEX = list(Gender, Total.INC), FUN = mean, na.rm = TRUE)), 2)
+
+NLSY97$Debt.by.30yo [is.na(NLSY97$Debt.by.30yo  & NLSY97$Gender == "Male" & NLSY97$Total.INC == 0)] <- u.DB3[2,1]
+NLSY97$Debt.by.30yo [is.na(NLSY97$Debt.by.30yo  & NLSY97$Gender == "Female" & NLSY97$Total.INC == 0)] <- u.DB3[1,1]
+NLSY97$Debt.by.30yo [is.na(NLSY97$Debt.by.30yo  & NLSY97$Gender == "Male" & NLSY97$Total.INC == 1)] <- u.DB3[2,2]
+NLSY97$Debt.by.30yo [is.na(NLSY97$Debt.by.30yo  & NLSY97$Gender == "Female" & NLSY97$Total.INC == 1)] <- u.DB3[1,2]
+NLSY97$Debt.by.30yo [is.na(NLSY97$Debt.by.30yo  & NLSY97$Gender == "Male" & NLSY97$Total.INC == 2)] <- u.DB3[2,3]
+NLSY97$Debt.by.30yo [is.na(NLSY97$Debt.by.30yo & NLSY97$Gender == "Female" & NLSY97$Total.INC == 2)] <- u.DB3[1,3]
+NLSY97$Debt.by.30yo [is.na(NLSY97$Debt.by.30yo  & NLSY97$Gender == "Male" & NLSY97$Total.INC == "3+")] <- u.DB3[2,4]
+NLSY97$Debt.by.30yo [is.na(NLSY97$Debt.by.30yo  & NLSY97$Gender == "Female" & NLSY97$Total.INC == "3+")] <- u.DB3[1,4]
+hist(NLSY97$Debt.by.30yo, col = "pink",
+     main = "Histogram of Respondent's Debt by 30 years old",
+     xlab = "Respondent's Debt by 30 years old")
+```
+
+```{r echo=FALSE, results='hide',message=FALSE}
+NLSY97$Njobs.14yo[NLSY97$Njobs.14yo < 0] <- NA
+New.Njobs.14yo <- NLSY97$Njobs.14yo
+qnt <- quantile(New.Njobs.14yo, probs=c(.25, .75), na.rm = TRUE)
+e.caps <- quantile(New.Njobs.14yo, probs=c(.2, .8), na.rm = TRUE)
+Outlier <- 1.5 * IQR(New.Njobs.14yo, na.rm = TRUE)
+New.Njobs.14yo[New.Njobs.14yo < (qnt[1] - Outlier)] <- e.caps[1]
+New.Njobs.14yo[New.Njobs.14yo > (qnt[2] + Outlier)] <- e.caps[2]
+New.Njobs.14yo[New.Njobs.14yo < e.caps[1]] <- e.caps[1]
+New.Njobs.14yo[New.Njobs.14yo > e.caps[2]] <- e.caps[2]
+NLSY97 <- transform(NLSY97, 
+                    Njobs.14yo = New.Njobs.14yo)
+u.Job <- round(with(NLSY97, tapply(Njobs.14yo, INDEX = list(Gender, Total.INC), FUN = mean, na.rm = TRUE)), 2)
+
+NLSY97$Njobs.14yo [is.na(NLSY97$Njobs.14yo  & NLSY97$Gender == "Male" & NLSY97$Total.INC == 0)] <- u.Job[2,1]
+NLSY97$Njobs.14yo [is.na(NLSY97$Njobs.14yo  & NLSY97$Gender == "Female" & NLSY97$Total.INC == 0)] <- u.Job[1,1]
+NLSY97$Njobs.14yo [is.na(NLSY97$Njobs.14yo  & NLSY97$Gender == "Male" & NLSY97$Total.INC == 1)] <- u.Job[2,2]
+NLSY97$Njobs.14yo [is.na(NLSY97$Njobs.14yo  & NLSY97$Gender == "Female" & NLSY97$Total.INC == 1)] <- u.Job[1,2]
+NLSY97$Njobs.14yo [is.na(NLSY97$Njobs.14yo  & NLSY97$Gender == "Male" & NLSY97$Total.INC == 2)] <- u.Job[2,3]
+NLSY97$Njobs.14yo [is.na(NLSY97$Njobs.14yo & NLSY97$Gender == "Female" & NLSY97$Total.INC == 2)] <- u.Job[1,3]
+NLSY97$Njobs.14yo [is.na(NLSY97$Njobs.14yo  & NLSY97$Gender == "Male" & NLSY97$Total.INC == "3+")] <- u.Job[2,4]
+NLSY97$Njobs.14yo [is.na(NLSY97$Njobs.14yo  & NLSY97$Gender == "Female" & NLSY97$Total.INC == "3+")] <- u.Job[1,4]
+hist(NLSY97$Njobs.14yo, col = "lightblue",
+     main = "Histogram of Respondent's Employment from 14 years old ",
+     xlab = "Respondent's Employment from 14 years old")
+```
+
+```{r echo=FALSE, results='hide',message=FALSE}
+NLSY97$jobs.20plus[NLSY97$jobs.20plus < 0] <- NA
+New.jobs.20plus <- NLSY97$jobs.20plus
+qnt <- quantile(New.jobs.20plus, probs=c(.25, .75), na.rm = TRUE)
+e.caps <- quantile(New.jobs.20plus, probs=c(.2, .8), na.rm = TRUE)
+Outlier <- 1.5 * IQR(New.jobs.20plus, na.rm = TRUE)
+New.jobs.20plus[New.jobs.20plus < (qnt[1] - Outlier)] <- e.caps[1]
+New.jobs.20plus[New.jobs.20plus > (qnt[2] + Outlier)] <- e.caps[2]
+New.jobs.20plus[New.jobs.20plus < e.caps[1]] <- e.caps[1]
+New.jobs.20plus[New.jobs.20plus > e.caps[2]] <- e.caps[2]
+NLSY97 <- transform(NLSY97, 
+                    jobs.20plus = New.jobs.20plus)
+u.Job2 <- round(with(NLSY97, tapply(jobs.20plus, INDEX = list(Gender, Total.INC), FUN = mean, na.rm = TRUE)), 2)
+
+NLSY97$jobs.20plus [is.na(NLSY97$jobs.20plus  & NLSY97$Gender == "Male" & NLSY97$Total.INC == 0)] <- u.Job2[2,1]
+NLSY97$jobs.20plus [is.na(NLSY97$jobs.20plus & NLSY97$Gender == "Female" & NLSY97$Total.INC == 0)] <- u.Job2[1,1]
+NLSY97$jobs.20plus [is.na(NLSY97$jobs.20plus  & NLSY97$Gender == "Male" & NLSY97$Total.INC == 1)] <- u.Job2[2,2]
+NLSY97$jobs.20plus [is.na(NLSY97$jobs.20plus  & NLSY97$Gender == "Female" & NLSY97$Total.INC == 1)] <- u.Job2[1,2]
+NLSY97$jobs.20plus [is.na(NLSY97$jobs.20plus  & NLSY97$Gender == "Male" & NLSY97$Total.INC == 2)] <- u.Job2[2,3]
+NLSY97$jobs.20plus [is.na(NLSY97$jobs.20plus & NLSY97$Gender == "Female" & NLSY97$Total.INC == 2)] <- u.Job2[1,3]
+NLSY97$jobs.20plus [is.na(NLSY97$jobs.20plus & NLSY97$Gender == "Male" & NLSY97$Total.INC == "3+")] <- u.Job2[2,4]
+NLSY97$jobs.20plus [is.na(NLSY97$jobs.20plus  & NLSY97$Gender == "Female" & NLSY97$Total.INC == "3+")] <- u.Job2[1,4]
+hist(NLSY97$jobs.20plus, col = "darkblue",
+     main = "Histogram of Respondent's Employment from 20 years old",
+     xlab = "Respondent's Employment from 20 years old")
+```
+
+```{r echo=FALSE, results='hide',message=FALSE}
+NLSY97$Household.Size[NLSY97$Household.Size < 0] <- NA
+New.Household.Size <- NLSY97$Household.Size
+qnt <- quantile(New.Household.Size, probs=c(.25, .75), na.rm = TRUE)
+e.caps <- quantile(New.Household.Size, probs=c(.2, .8), na.rm = TRUE)
+Outlier <- 1.5 * IQR(New.Household.Size, na.rm = TRUE)
+New.Household.Size[New.Household.Size < (qnt[1] - Outlier)] <- e.caps[1]
+New.Household.Size[New.Household.Size > (qnt[2] + Outlier)] <- e.caps[2]
+New.Household.Size[New.Household.Size < e.caps[1]] <- e.caps[1]
+New.Household.Size[New.Household.Size > e.caps[2]] <- e.caps[2]
+NLSY97 <- transform(NLSY97, 
+                    Household.Size = New.Household.Size)
+u.HS <- round(with(NLSY97, tapply(Household.Size, INDEX = list(Gender, Total.INC), FUN = mean, na.rm = TRUE)), 2)
+
+NLSY97$Household.Size [is.na(NLSY97$Household.Size  & NLSY97$Gender == "Male" & NLSY97$Total.INC == 0)] <- u.HS[2,1]
+NLSY97$Household.Size [is.na(NLSY97$Household.Size & NLSY97$Gender == "Female" & NLSY97$Total.INC == 0)] <- u.HS[1,1]
+NLSY97$Household.Size [is.na(NLSY97$Household.Size  & NLSY97$Gender == "Male" & NLSY97$Total.INC == 1)] <- u.HS[2,2]
+NLSY97$Household.Size [is.na(NLSY97$Household.Size  & NLSY97$Gender == "Female" & NLSY97$Total.INC == 1)] <- u.HS[1,2]
+NLSY97$Household.Size [is.na(NLSY97$Household.Size  & NLSY97$Gender == "Male" & NLSY97$Total.INC == 2)] <- u.HS[2,3]
+NLSY97$Household.Size [is.na(NLSY97$Household.Size & NLSY97$Gender == "Female" & NLSY97$Total.INC == 2)] <- u.HS[1,3]
+NLSY97$Household.Size[is.na(NLSY97$Household.Size  & NLSY97$Gender == "Male" & NLSY97$Total.INC == "3+")] <- u.HS[2,4]
+NLSY97$Household.Size [is.na(NLSY97$Household.Size  & NLSY97$Gender == "Female" & NLSY97$Total.INC == "3+")] <- u.HS[1,4]
+hist(NLSY97$Household.Size, col = "pink",
+     main = "Histogram of Respondent's Household Size",
+     xlab = "Respondent's Household Size")
+```
+
+Converting height to inches
+
+```{r echo=FALSE, results='hide',message=FALSE}
+new.height <- NLSY97$Height.ft*12 + NLSY97$Height.in
+NLSY97 <- transform(NLSY97, 
+                    Height.in = new.height)
+
+summary(NLSY97$Height.in)
+```
+
+```{r echo=FALSE, results='hide',message=FALSE}
+NLSY97$Height.in[NLSY97$Height.in < 0] <- NA
+New.Height.in <- NLSY97$Height.in
+qnt <- quantile(New.Height.in, probs=c(.25, .75), na.rm = TRUE)
+e.caps <- quantile(New.Height.in, probs=c(.2, .8), na.rm = TRUE)
+Outlier <- 1.5 * IQR(New.Height.in, na.rm = TRUE)
+New.Height.in[New.Height.in < (qnt[1] - Outlier)] <- e.caps[1]
+New.Height.in[New.Height.in > (qnt[2] + Outlier)] <- e.caps[2]
+New.Height.in[New.Height.in < e.caps[1]] <- e.caps[1]
+New.Height.in[New.Height.in > e.caps[2]] <- e.caps[2]
+NLSY97 <- transform(NLSY97, 
+                    Height.in = New.Height.in)
+u.HT <- round(with(NLSY97, tapply(Height.in, INDEX = list(Gender, Total.INC), FUN = mean, na.rm = TRUE)), 2)
+
+NLSY97$Height.in [is.na(NLSY97$Height.in  & NLSY97$Gender == "Male" & NLSY97$Total.INC == 0)] <- u.HT[2,1]
+NLSY97$Height.in [is.na(NLSY97$Height.in & NLSY97$Gender == "Female" & NLSY97$Total.INC == 0)] <- u.HT[1,1]
+NLSY97$Height.in [is.na(NLSY97$Height.in  & NLSY97$Gender == "Male" & NLSY97$Total.INC == 1)] <- u.HT[2,2]
+NLSY97$Height.in [is.na(NLSY97$Height.in  & NLSY97$Gender == "Female" & NLSY97$Total.INC == 1)] <- u.HT[1,2]
+NLSY97$Height.in [is.na(NLSY97$Height.in  & NLSY97$Gender == "Male" & NLSY97$Total.INC == 2)] <- u.HT[2,3]
+NLSY97$Height.in [is.na(NLSY97$Height.in & NLSY97$Gender == "Female" & NLSY97$Total.INC == 2)] <- u.HT[1,3]
+NLSY97$Height.in[is.na(NLSY97$Height.in  & NLSY97$Gender == "Male" & NLSY97$Total.INC == "3+")] <- u.HT[2,4]
+NLSY97$Height.in [is.na(NLSY97$Height.in  & NLSY97$Gender == "Female" & NLSY97$Total.INC == "3+")] <- u.HT[1,4]
+hist(NLSY97$Height.in, col = "red",
+     main = "Histogram of Respondent's Height in Inches",
+     xlab = "Respondent's Height in Inches")
+```
+
+Continuous Variables treated similar to `Chance.Jail.20yo`:
+`Chance.Parent.20yo`| `Chance.Bach.Degree.30yo`|`Chance.Flu`|`Chance.HS.Diploma.20yo`
+
+```{r echo=FALSE, results='hide',message=FALSE}
+NLSY97$Chance.Parent.20yo[NLSY97$Chance.Parent.20yo < 0] <- NA
+u.PCP <- with(NLSY97, tapply(Chance.Parent.20yo, INDEX = list(Gender, Total.INC), FUN = mean, na.rm = TRUE))
+
+NLSY97$Chance.Parent.20yo[is.na(NLSY97$Chance.Parent.20yo & NLSY97$Gender == "Male" & NLSY97$Total.INC == 0)] <- u.PCP[2,1]
+NLSY97$Chance.Parent.20yo[is.na(NLSY97$Chance.Parent.20yo & NLSY97$Gender == "Female" & NLSY97$Total.INC == 0)] <- u.PCP[1,1]
+NLSY97$Chance.Parent.20yo[is.na(NLSY97$Chance.Parent.20yo & NLSY97$Gender == "Male" & NLSY97$Total.INC == 1)] <- u.PCP[2,2]
+NLSY97$Chance.Parent.20yo[is.na(NLSY97$Chance.Parent.20yo & NLSY97$Gender == "Female" & NLSY97$Total.INC == 1)] <- u.PCP[1,2]
+NLSY97$Chance.Parent.20yo[is.na(NLSY97$Chance.Parent.20yo & NLSY97$Gender == "Male" & NLSY97$Total.INC == 2)] <- u.PCP[2,3]
+NLSY97$Chance.Parent.20yo[is.na(NLSY97$Chance.Parent.20yo & NLSY97$Gender == "Female" & NLSY97$Total.INC == 2)] <- u.PCP[1,3]
+NLSY97$Chance.Parent.20yo[is.na(NLSY97$Chance.Parent.20yo & NLSY97$Gender == "Male" & NLSY97$Total.INC == "3+")] <- u.PCP[2,4]
+NLSY97$Chance.Parent.20yo[is.na(NLSY97$Chance.Parent.20yo & NLSY97$Gender == "Female" & NLSY97$Total.INC == "3+")] <- u.PCP[1,4]
+
+hist(NLSY97$Chance.Parent.20yo, col = "purple",
+     main = "Histogram of Percent Chance of becoming a Parent by 20 years old",
+      xlab = "Percent Chance of becoming a Parent by 20 years old")
+```
+
+```{r echo=FALSE, results='hide',message=FALSE}
+NLSY97$Chance.Bach.Degree.30yo[NLSY97$Chance.Bach.Degree.30yo < 0] <- NA
+u.PCB <- with(NLSY97, tapply(Chance.Bach.Degree.30yo, INDEX = list(Gender, Total.INC), FUN = mean, na.rm = TRUE))
+
+NLSY97$Chance.Bach.Degree.30yo[is.na(NLSY97$Chance.Bach.Degree.30yo & NLSY97$Gender == "Male" & NLSY97$Total.INC == 0)] <- u.PCB[2,1]
+NLSY97$Chance.Bach.Degree.30yo[is.na(NLSY97$Chance.Bach.Degree.30yo & NLSY97$Gender == "Female" & NLSY97$Total.INC == 0)] <- u.PCB[1,1]
+NLSY97$Chance.Bach.Degree.30yo[is.na(NLSY97$Chance.Bach.Degree.30yo & NLSY97$Gender == "Male" & NLSY97$Total.INC == 1)] <- u.PCB[2,2]
+NLSY97$Chance.Bach.Degree.30yo[is.na(NLSY97$Chance.Bach.Degree.30yo & NLSY97$Gender == "Female" & NLSY97$Total.INC == 1)] <- u.PCB[1,2]
+NLSY97$Chance.Bach.Degree.30yo[is.na(NLSY97$Chance.Bach.Degree.30yo & NLSY97$Gender == "Male" & NLSY97$Total.INC == 2)] <- u.PCB[2,3]
+NLSY97$Chance.Bach.Degree.30yo[is.na(NLSY97$Chance.Bach.Degree.30yo & NLSY97$Gender == "Female" & NLSY97$Total.INC == 2)] <- u.PCB[1,3]
+NLSY97$Chance.Bach.Degree.30yo[is.na(NLSY97$Chance.Bach.Degree.30yo & NLSY97$Gender == "Male" & NLSY97$Total.INC == "3+")] <- u.PCB[2,4]
+NLSY97$Chance.Bach.Degree.30yo[is.na(NLSY97$Chance.Bach.Degree.30yo & NLSY97$Gender == "Female" & NLSY97$Total.INC == "3+")] <- u.PCB[1,4]
+
+hist(NLSY97$Chance.Bach.Degree.30yo, col = "green",
+     main = "Histogram of Percent Chance of earning Bachelor's Degree by 30 years old",
+      xlab = "Percent Chance of earning Bachelor's Degree by 30 years old")
+```
+
+
+
+###Exploratory Plot Analyses
+```{r echo=FALSE, results='hide',message=FALSE}
+qplot(x=Total.INC, y=Income, data=NLSY97, 
+      colour=Gender, 
+      shape=Gender,
+      xlab = "Total Number of Incarcerations",
+      ylab = "Income"
+) 
+```
+
+Evident after the data is cleaned and plotted, there is a discrepancy in income based on the relationship of gender and incarceration and through ANOVA testing, confirm that both variables are significant to `Income`.
+
+```{r}
+summary(aov(Income ~ Total.INC, data = NLSY97))
+summary(aov(Income ~ Gender, data = NLSY97))
+```
+
+Establishing the connection between the variables, is there a relationship of and `Income` discrepancy in regards to `Gender` constant with `Total.INC`.
+
+```{r}
+income.gap.noreg <- ddply(NLSY97, ~ Total.INC, summarize, Income.Gap = mean(Income[Gender == "Male"], na.rm = TRUE) - mean(Income[Gender == "Female"], na.rm = TRUE)) 
+
+income.gap.noreg
+
+gap.data <- ddply(NLSY97, ~ Total.INC, summarize, Income.Gap = mean(Income[Gender == "Male"], na.rm = TRUE) - mean(Income[Gender == "Female"], na.rm = TRUE))
+
+ggplot(gap.data, aes(x= Total.INC, y=Income.Gap, fill=Total.INC)) + 
+  geom_bar(position="dodge", stat="identity") 
+
+```
+
+Yes, there is a clear distinction of an `Income` discrepancy of `Gender` as a constant in regards to `Total.INC`. 
+
+
+```{r}
+gap.data.conf <- ddply(NLSY97, ~ Total.INC, summarize, income.gap = mean(Income[Gender == "Male"], na.rm = TRUE) - mean(Income[Gender == "Female"], na.rm = TRUE),
+                       upper = -t.test(Income ~ Gender)$conf.int[1],
+                       lower = -t.test(Income ~ Gender)$conf.int[2])
+gap.data.conf
+
+ggplot(data = gap.data.conf, aes(x=Total.INC, y=income.gap)) + 
+  geom_bar(position="dodge", stat="identity")  + geom_bar(stat = "identity", position = "dodge") + 
+  ylab("Income Gap") + 
+  xlab("Total.INC") +  
+  geom_errorbar(aes(ymax = upper, ymin = lower), width = 0.1, size = 1) +
+  theme(text = element_text(size=14))
+table(NLSY97$Total.INC, NLSY97$Gender)
+```
+
+The confidence levels and error values are interesting which is dictated by the sample size. The developments from the data analysis justifies that these cirumstances should be further investigated with more stratified data to reduce error in observations. 
+
+Some interesting findings from cleaning the data based on means of continuous variables and the `Gender` - `Total.INC` relationship are as follows: 
+
+```{r echo=FALSE, results='hide',message=FALSE}
+u.Net.P <- with(NLSY97, tapply(Net.Worth.Parent, INDEX = list(Gender, Total.INC), FUN = mean, na.rm = TRUE))
+colnames(u.Net.P) <- c("Net T.Inc 0", "Net T.Inc 1", "Net T.Inc 2", "Net T.Inc 3+")
+u.Net.P
+
+qplot(x=Net.Worth.Parent, y=Total.INC, data=NLSY97, 
+      colour=Gender, 
+      shape=Gender,
+      xlab = "Total.INC",
+      ylab = "Total Number of Incarcerations"
+) 
+
+```
+
+According to the dataset, women who have been incarcerated at least two times are the only groupings per `Gender` and `Total.INC` to come from homes with an average net worth sub $40,000. 
+
+```{r echo=FALSE, results='hide',message=FALSE}
+u.HS <- round(with(NLSY97, tapply(Household.Size, INDEX = list(Gender, Total.INC), FUN = mean, na.rm = TRUE)), 2)
+colnames(u.HS) <- c("HS T.Inc 0", "HS T.Inc 1", "HS T.Inc 2", "HS T.Inc 3+")
+u.HS
+```
+
+Interestingly, `Household.Size` averages are the same across the board. The next question to investigate is are the individuals within the home contributing to the `Gross.Family.Income`.
+
+```{r echo=FALSE, results='hide',message=FALSE}
+u.GI <- round(with(NLSY97, tapply(Gross.Family.Income, INDEX = list(Gender, Total.INC), FUN = mean, na.rm = TRUE)), 2)
+colnames(u.GI) <- c("GI T.Inc 0", "GI T.Inc 1", "GI T.Inc 2" ,"GI T.Inc 3+" )
+u.GI
+
+u.I <- round(with(NLSY97, tapply(Income, INDEX = list(Gender, Total.INC), FUN = mean, na.rm = TRUE)), 2)
+colnames(u.I) <- c("I T.Inc 0", "I T.Inc 1", "I T.Inc 2" ,"I T.Inc 3+" )
+u.I
+
+Diff.Income<- u.GI-u.I
+colnames(Diff.Income) <- c("Diff T.Inc 0", "Diff T.Inc 1", "Diff T.Inc 2" ,"Diff T.Inc 3+" )
+Diff.Income
+
+ggplot(NLSY97, aes(x=Gross.Family.Income, y=Income, fill = Gender)) +
+  geom_bar(position="dodge", stat="identity") 
+```
+The difference we see from the subraction of `Income` from `Gross.Family.Income` is that males tend to be the highest contributors to household finances. 
+
+```{r}
+qplot(x=Marital.Status, y=Income, data=NLSY97, 
+      colour=Gender, 
+      shape=Gender,
+      xlab = "Marital Status",
+      ylab = "Income"
+) 
+
+u.I2 <- round(with(NLSY97, tapply(Income, INDEX = list(Gender, Total.INC, Marital.Status), FUN = mean, na.rm = TRUE)), 2)
+u.I2
+
+G.table <- table(NLSY97$Gender, NLSY97$Marital.Status)
+G.table
+sum(G.table[1,1], G.table[1,4], G.table[1,6], G.table[1,7])
+sum(G.table[2,1], G.table[2,4], G.table[2,6], G.table[2,7])
+
+sum(G.table)
+```
+
+There is evidence to suggest that `r sum(G.table[1,1], G.table[1,4], G.table[1,6], G.table[1,7])` women out of `r sum(G.table)` total observations are in registered as Divorced, Married, Single, Separated or Widowed compared to `r sum(G.table[2,1], G.table[2,4], G.table[2,6], G.table[2,7])` of their male counter parts. 
+
+
+###Linear regression model
+
+Due to the high volume of variables to consider, the regressions will be a multi-step evaluation segemented by categorical and continuous variables. All filtered for a statisical significant p-value of 0.05 or lower. A baseline model was run for the two categories of variables. Inital sweeps produced several variables that were able to be ruled out and then backward step-wise reduction of variables based on statistical significance was run to achieve the final model.   
+```{r echo=FALSE, message=FALSE}
+Cont.lm <- lm(Income ~ +Length.Longest.INC + Net.Worth.Parent + Net.Worth.Student
+           + MJ.Use.30days + MJ.Use.30days2 + Weight.in.lbs + Weight.in.lbs2 + Gross.Family.Income + Household.Size
+           + Spouse.Income + MJ.Use.30days2 + Debt.by.20yo + Chance.Jail.20yo + Chance.Parent.20yo
+           + Njobs.14yo + jobs.20plus + Debt.by.30yo + Chance.Bach.Degree.30yo + Height.in, data= NLSY97)
+summary(Cont.lm)
+```
+
+There are several variables that are proving to be statistically insignificant:
+    
+`Net.Worth.Student` 
+`MJ.Use.30days`    
+`Weight.in.lbs`     
+`Weight.in.lbs2`     
+`Njobs.14yo`        
+
+After removing those variables an updated model emerged:   
+
+```{r echo=FALSE, message=FALSE}
+new.Cont.lm <- update(Cont.lm, . ~ . - Net.Worth.Student - MJ.Use.30days - MJ.Use.30days2 -Spouse.Income
+       -Chance.Jail.20yo - jobs.20plus -Weight.in.lbs -Weight.in.lbs2 - Njobs.14yo)
+summary(new.Cont.lm)
+```
+
+Each of the remaining variables are proving to be statistically significant for this inital stage of the model. 
+
+```{r echo=FALSE, results='hide',message=FALSE}
+Cat.lm = lm(Income ~ + Birth.Month + Dis.Limits + Gender + F.Neg.Emotion
+            + Current.Enrollment.Status + Race + Grade.8.Grades
+            + Trustworthy.Level + Perceived.Weight + Higher.Ed.Type
+            + Highest.Degree.preFall + Marital.Status + Highest.Grade.Completed
+            + Income.binary + Spouse.Income.binary + Spouse.Income.Est 
+            + Tobacco.Smoke.DLI + Alcohol.Consumption.DLI + Perceived.Weight2 + Weight.Care
+             + Energy.Level.4wks + Business.Type + SAT.Verbal + SAT.Math + ACT.Score + Quality.Teachers 
+            + Safe.School + NWk.Religious.Practice + M.Neg.Emotion + HS.Grades + Hard.Drug.Use + Organization.Level 
+            + Philanthropy.Scale + Independence.Scale + Personal.Philanthropy.Scale + Individual.Independence.Scale
+            + Hard.Drug.Use.DLI, data = NLSY97) 
+summary(Cat.lm)
+```
+
+Serveral variables appear to have a non-statisical relationship to `Income` but since there are serveral outputs per variable, the significance will be confirmed through ANOVA testing and Chi-square.
+
+ANOVAs are run on a separate Rmd file to save space.
+
+The following variables have proven to be statistically insignificant to the model:
+`M.Neg.Emotion`
+`NWk.Religious.Practice`
+`Quality.Teachers`
+`Safe.School`
+`Hard.Drug.Use`
+`Organization.Level`
+`Individual.Independence.Scale`
+`Independence.Scale`
+`Personal.Philanthropy.Scale`
+`HS.Grades`
+
+The regression ran again with the aforementioned variables removed. 
+
+```{r echo=FALSE, results='hide',message=FALSE}
+Cat.lm2 = lm(Income ~ + Birth.Month + Dis.Limits + Gender + F.Neg.Emotion
+            + Current.Enrollment.Status + Race + Grade.8.Grades
+            + Trustworthy.Level + Perceived.Weight + Higher.Ed.Type
+            + Highest.Degree.preFall + Marital.Status + Highest.Grade.Completed
+            + Income.binary + Spouse.Income.binary + Spouse.Income.Est 
+            + Tobacco.Smoke.DLI + Alcohol.Consumption.DLI + Perceived.Weight2 + Weight.Care 
+            + Energy.Level.4wks + Business.Type + SAT.Verbal + SAT.Math + ACT.Score, 
+             data = NLSY97) 
+summary(Cat.lm2)
+```
+More rows are published and the ANOVA significance testing was used to filter models again. 
+
+To get the final model, both continuous and categorical variables need to be added together. 
+
+```{r}
+Merged.model <- lm(Income ~ +Length.Longest.INC + Net.Worth.Parent + Net.Worth.Student
+           + MJ.Use.30days + MJ.Use.30days2 + Weight.in.lbs + Weight.in.lbs2 + Gross.Family.Income + Household.Size
+           + Spouse.Income + MJ.Use.30days2 + Debt.by.20yo + Chance.Jail.20yo + Chance.Parent.20yo
+           + Njobs.14yo + jobs.20plus + Debt.by.30yo + Chance.Bach.Degree.30yo + Height.in +Birth.Month 
+           + Dis.Limits + Gender + F.Neg.Emotion
+            + Current.Enrollment.Status + Race + Grade.8.Grades
+            + Trustworthy.Level + Perceived.Weight + Higher.Ed.Type
+            + Highest.Degree.preFall + Marital.Status + Highest.Grade.Completed
+            + Income.binary + Spouse.Income.binary + Spouse.Income.Est 
+            + Tobacco.Smoke.DLI + Alcohol.Consumption.DLI + Perceived.Weight2 + Weight.Care 
+            + Energy.Level.4wks + Business.Type + SAT.Verbal + SAT.Math + ACT.Score, 
+             data = NLSY97) 
+summary(Merged.model)
+plot(Merged.model)
+```
+
+A relatively strong R-squared of 0.5478 was achieved from such a large set of variables. However, an Adjusted R-squared of 0.3935 proves that the is a little bit of volitility in the variance. The plotted data suggests a relatively good fit and normal distriubtion. In the interest of achieveing a more stable model, variables were removed one by one based on p-value to get a better adjusted R-squared.
+
+Resulting in the final model:
+
+```{r}
+Final.model <- lm(Income ~ + Net.Worth.Parent
+           + Gross.Family.Income + Household.Size
+          + Debt.by.20yo + Chance.Jail.20yo + Chance.Parent.20yo
+           + Njobs.14yo + jobs.20plus + Chance.Bach.Degree.30yo
+           + Gender + Total.INC
+            + Highest.Degree.preFall, 
+             data = NLSY97) 
+summary(Final.model)
+plot(Final.model)
+```
+
+```{r}
+Final.model.summary <- summary(Final.model)
+kable(Final.model.summary$coef)
+```
+
+####Model Analysis
+
+Strength of the Model
+
+With the objective of trying to achieve as much stability as possible in R-squared along with trying to get the highest value out of it, the residual and fitted plots on `Final.model` incdicate a stronger model as compared to `Merge.model`. The model was not as normally distributed comparing standardized residuals to Theoretical Quantiles 
+but there is a stronger concentration of residuals on the 0 line for Residuals vs Fitted Values and a large reduction in Residuals vs Leverage with no values dropping below Cook's distance. All variables are proven to be statistically significant at 95%.
+
+Overall, the model is relatively strong based on the high volumes of no answers and small observations for several variables.
+
+Information inferred from the model
+
+To answer the inital question, `Gender` plays a large role in determining income by having an increase of $`r round(coef(Final.model)["GenderMale"], 2)` on `Income`, according to this model. 
+
+The type of degree one has is also beneficial with Master's, PhD, and Professional degrees having an positive impact of $`r round(coef(Final.model)["Highest.Degree.preFallMast"], 2)`, $`r round(coef(Final.model)["Highest.Degree.preFallPhD"], 2)`, and $`r round(coef(Final.model)["Highest.Degree.preFallProf"], 2)`, respectively. 
+
+This model also suggests that the more jobs one has by past the age of 20, there is a decresing effect on `Income` of $`r round(coef(Final.model)["jobs.20plus"], 2)`.
+
+Most importantly to this assessment, the more one is incarcerated the lower the total income. One incarceration can have a decreasing effect on `Income` by $`r round(coef(Final.model)["Total.INC1"], 2)`, increasing that impact to $`r round(coef(Final.model)["Total.INC2"], 2)` and $`r round(coef(Final.model)["Total.INC3+"], 2)` for subsequent incarceration groupings. 
+
+###Findings
+
+The `Income` and `Gender` discrepancy has proven to be a constant across the board where females earn less, regardless of marital, occupational, and recreational circumstances. The most concerning evidence produced from this report is the inability for females to bridge the income gap after incarceration at the rate of which males do. 
+
+Admittedly, there is a limited representation of certain observations where a more stratified population of data would produce more definitive findings. This report suggests a look at the surrounding environmental and economic impacts at the expense of females being incarcerated. Females coming from low-income- sub $40,000 parental net worth, backgrounds are more likely to be incarcerated and, once released, are unable to bring their families out of the low-income standard as well. Potentially producing a cycle of impoverished communities and increasing the chances of their children to be incarcerated. 
+
